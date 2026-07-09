@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile - Smart Job Finder</title>
+    
+    <!-- Bootstrap and Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    
+    <!-- Custom Style System -->
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="js/api.js" defer></script>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-custom jobseeker-nav">
+        <div class="container">
+            <span class="navbar-brand">
+                <i class="bi bi-person-circle"></i> My Profile
+            </span>
+            <div>
+                <a href="jobseeker-dashboard.html" class="btn btn-outline-primary me-2">
+                    <i class="bi bi-house"></i> Dashboard
+                </a>
+                <button class="btn btn-outline-danger btn-logout">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 sidebar-custom p-0">
+                <div class="py-4">
+                    <h4 class="menu-title">Menu</h4>
+                    <div class="px-3">
+                        <a href="jobseeker-dashboard.html" class="menu-link">
+                            <i class="bi bi-house-door"></i> Dashboard
+                        </a>
+                        <a href="jobs.html" class="menu-link">
+                            <i class="bi bi-search"></i> Search Jobs
+                        </a>
+                        <a href="my-applications.html" class="menu-link">
+                            <i class="bi bi-file-earmark-text"></i> My Applications
+                        </a>
+                        <a href="jobseeker-profile.html" class="menu-link active">
+                            <i class="bi bi-person-circle"></i> My Profile
+                        </a>
+                        <a href="resume-upload.html" class="menu-link">
+                            <i class="bi bi-upload"></i> Upload Resume
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <main class="col-md-9 col-lg-10 p-4 p-md-5">
+                <h2 class="fw-bold mb-4">Edit Candidate Profile</h2>
+                <p class="text-secondary">Keep your information up to date so companies can reach out to you with relevant offers.</p>
+
+                <div class="premium-card p-4 p-md-5 mt-2" style="max-width: 800px;">
+                    <div id="loading-spinner" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="text-secondary mt-2 small">Loading profile...</p>
+                    </div>
+
+                    <form id="profileForm" class="d-none">
+                        <div class="row g-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Full Name</label>
+                                <input type="text" id="name" class="form-control form-control-custom" required>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Email Address</label>
+                                <input type="email" id="email" class="form-control form-control-custom bg-light" readonly>
+                                <span class="text-secondary small">Email address cannot be changed.</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Highest Qualification</label>
+                            <input type="text" id="qualification" class="form-control form-control-custom" placeholder="Example: B.Tech CSE, Diploma ME" required>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">Professional Skills</label>
+                            <input type="text" id="skills" class="form-control form-control-custom" placeholder="Example: HTML, CSS, JavaScript, Java, React (comma separated)" required>
+                            <span class="text-secondary small">List your technical skills separated by commas.</span>
+                        </div>
+                        
+                        <button type="submit" id="submitBtn" class="btn btn-premium btn-premium-primary px-5 py-3">
+                            <i class="bi bi-save"></i> Save Profile Settings
+                        </button>
+                    </form>
+                </div>
+            </main>
+            
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Auth check
+            const user = Session.checkAuth('seeker');
+            if (!user) return;
+
+            const form = document.getElementById('profileForm');
+            const spinner = document.getElementById('loading-spinner');
+
+            try {
+                // Fetch profile details
+                const data = await API.profile.getSeeker(user.email);
+                const seeker = data.profile;
+
+                // Populate fields
+                document.getElementById('name').value = seeker.name;
+                document.getElementById('email').value = seeker.email;
+                document.getElementById('qualification').value = seeker.qualification;
+                document.getElementById('skills').value = seeker.skills;
+
+                // Toggle visibility
+                spinner.classList.add('d-none');
+                form.classList.remove('d-none');
+
+            } catch (err) {
+                console.error("Failed to load profile details:", err);
+                spinner.innerHTML = `
+                    <span class="text-danger small">
+                        <i class="bi bi-exclamation-triangle-fill"></i> Failed to retrieve profile settings.
+                    </span>
+                `;
+            }
+
+            // Save profile updates
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Saving...';
+
+                const name = document.getElementById('name').value.trim();
+                const qualification = document.getElementById('qualification').value.trim();
+                const skills = document.getElementById('skills').value.trim();
+
+                try {
+                    const response = await API.profile.updateSeeker(user.email, { name, qualification, skills });
+                    showToast(response.message || "Profile updated successfully!", "success");
+                    
+                    // Update session context (if name changed)
+                    const currentUser = Session.getUser();
+                    currentUser.name = name;
+                    Session.setUser(currentUser);
+                } catch (err) {
+                    // Handled inside api.js
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-save"></i> Save Profile Settings';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

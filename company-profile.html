@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company Profile - Smart Job Finder</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    
+    <!-- Custom Style System -->
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="js/api.js" defer></script>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-custom company-nav">
+        <div class="container">
+            <span class="navbar-brand">
+                <i class="bi bi-building"></i> Company Profile
+            </span>
+            <div>
+                <a href="company-dashboard.html" class="btn btn-outline-success me-2">
+                    <i class="bi bi-house"></i> Dashboard
+                </a>
+                <button class="btn btn-outline-danger btn-logout">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div id="loading-spinner" class="text-center py-5">
+            <div class="spinner-border text-success" role="status"></div>
+            <p class="text-secondary mt-2">Loading profile details...</p>
+        </div>
+
+        <div class="row g-4 d-none" id="profile-container">
+            <!-- Left Side: Profile Form -->
+            <div class="col-lg-7">
+                <div class="premium-card p-4 p-md-5">
+                    <div class="text-center mb-4">
+                        <div class="d-inline-flex align-items-center justify-content-center text-success bg-light rounded-circle shadow mb-3" style="width: 80px; height: 80px;">
+                            <i class="bi bi-building-fill" style="font-size: 45px;"></i>
+                        </div>
+                        <h3 class="fw-bold text-success" id="company-name-title">Company Name</h3>
+                        <p class="text-secondary small mb-0" id="company-industry-title">Information Technology</p>
+                    </div>
+                    <hr>
+
+                    <form id="profileForm">
+                        <div class="row g-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Company Name</label>
+                                <input type="text" id="name" class="form-control form-control-custom" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Corporate Email</label>
+                                <input type="email" id="email" class="form-control form-control-custom bg-light" readonly>
+                                <span class="text-secondary small">Email address cannot be changed.</span>
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Contact Phone</label>
+                                <input type="tel" id="phone" class="form-control form-control-custom" placeholder="+91 9999988888" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Headquarters Location</label>
+                                <input type="text" id="location" class="form-control form-control-custom" placeholder="Example: Hyderabad, India" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Industry Vertical</label>
+                            <input type="text" id="industry" class="form-control form-control-custom" placeholder="Example: Software / HealthTech / Finance" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">About Company</label>
+                            <textarea id="about" class="form-control form-control-custom" rows="5" placeholder="Brief description about company mission, products, or services..." required></textarea>
+                        </div>
+
+                        <button type="submit" id="submitBtn" class="btn btn-premium btn-premium-secondary w-100 py-3">
+                            <i class="bi bi-save"></i> Save Profile Details
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right Side: Active Postings list -->
+            <div class="col-lg-5">
+                <div class="premium-card p-4 h-100">
+                    <h4 class="fw-bold mb-3"><i class="bi bi-briefcase text-success me-2"></i>Active Vacancies</h4>
+                    <p class="text-secondary small">Job openings currently active for this company profile</p>
+                    <hr>
+                    
+                    <div id="company-jobs-list" class="d-flex flex-column gap-3 mt-3">
+                        <!-- Injected job list cards -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Auth check
+            const user = Session.checkAuth('company');
+            if (!user) return;
+
+            const form = document.getElementById('profileForm');
+            const spinner = document.getElementById('loading-spinner');
+            const container = document.getElementById('profile-container');
+
+            try {
+                // Fetch profile and jobs
+                const [profileData, jobsData] = await Promise.all([
+                    API.profile.getCompany(user.email),
+                    API.jobs.getAll()
+                ]);
+
+                const profile = profileData.profile;
+                const myJobs = jobsData.jobs.filter(j => j.companyEmail === user.email);
+
+                // Bind profile data
+                document.getElementById('company-name-title').innerText = profile.name;
+                document.getElementById('company-industry-title').innerText = profile.industry || 'Corporate Profile';
+                
+                document.getElementById('name').value = profile.name;
+                document.getElementById('email').value = profile.email;
+                document.getElementById('phone').value = profile.phone;
+                document.getElementById('location').value = profile.location;
+                document.getElementById('industry').value = profile.industry;
+                document.getElementById('about').value = profile.about;
+
+                // Bind job list
+                const jobsContainer = document.getElementById('company-jobs-list');
+                jobsContainer.innerHTML = '';
+
+                if (myJobs.length === 0) {
+                    jobsContainer.innerHTML = `
+                        <div class="text-center py-4 text-secondary">
+                            <i class="bi bi-folder-x fs-3 d-block mb-2"></i>
+                            No active jobs listed.
+                        </div>
+                    `;
+                } else {
+                    myJobs.forEach(job => {
+                        jobsContainer.innerHTML += `
+                            <div class="p-3 bg-light rounded-3 border border-slate-200">
+                                <h6 class="fw-bold mb-1">${job.title}</h6>
+                                <p class="text-secondary small mb-2"><i class="bi bi-geo-alt"></i> ${job.location} | ${job.type}</p>
+                                <span class="badge bg-success px-2 py-1 small rounded-pill">${job.status}</span>
+                            </div>
+                        `;
+                    });
+                }
+
+                // Show panel
+                spinner.classList.add('d-none');
+                container.classList.remove('d-none');
+
+            } catch (err) {
+                console.error("Failed to load profile settings:", err);
+                spinner.innerHTML = `<span class="text-danger small">Failed to load company profile.</span>`;
+            }
+
+            // Save details
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Saving...';
+
+                const name = document.getElementById('name').value.trim();
+                const phone = document.getElementById('phone').value.trim();
+                const location = document.getElementById('location').value.trim();
+                const industry = document.getElementById('industry').value.trim();
+                const about = document.getElementById('about').value.trim();
+
+                try {
+                    const response = await API.profile.updateCompany(user.email, { name, phone, location, industry, about });
+                    showToast(response.message || "Profile details updated successfully!", "success");
+
+                    // Update session context name
+                    const currentUser = Session.getUser();
+                    currentUser.name = name;
+                    Session.setUser(currentUser);
+
+                    // Update UI titles
+                    document.getElementById('company-name-title').innerText = name;
+                    document.getElementById('company-industry-title').innerText = industry;
+
+                } catch (err) {
+                    // Handled inside api.js
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-save"></i> Save Profile Details';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

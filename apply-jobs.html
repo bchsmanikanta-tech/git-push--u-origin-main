@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apply for Job - Smart Job Finder</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    
+    <!-- Custom Style System -->
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="js/api.js" defer></script>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-custom jobseeker-nav">
+        <div class="container">
+            <span class="navbar-brand">
+                <i class="bi bi-send"></i> Job Application
+            </span>
+            <div>
+                <a id="back-btn" href="jobs.html" class="btn btn-outline-primary me-2">
+                    <i class="bi bi-arrow-left"></i> Cancel
+                </a>
+                <button class="btn btn-outline-danger btn-logout">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div class="glass-card mx-auto p-4 p-md-5" style="max-width: 650px;">
+            
+            <div class="text-center mb-4">
+                <h2 class="fw-bold text-primary">Job Application Form</h2>
+                <p class="text-secondary small">Provide details below to submit your candidature</p>
+                <hr>
+            </div>
+            
+            <div id="loading-spinner" class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-secondary mt-2 small">Preparing form...</p>
+            </div>
+
+            <form id="applyForm" class="d-none">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Job Title</label>
+                    <input type="text" id="job-title" class="form-control form-control-custom bg-light" readonly>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Full Name</label>
+                        <input type="text" id="full-name" class="form-control form-control-custom" required>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Email Address</label>
+                        <input type="email" id="email" class="form-control form-control-custom bg-light" readonly>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Phone Number</label>
+                    <input type="tel" id="phone" class="form-control form-control-custom" placeholder="+91 9999988888" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Upload Application Resume</label>
+                    <input type="file" id="resume-file" class="form-control form-control-custom mb-2">
+                    
+                    <div class="form-check" id="use-existing-resume-wrapper" style="display: none;">
+                        <input class="form-check-input" type="checkbox" id="use-existing-resume" checked>
+                        <label class="form-check-label text-secondary small" for="use-existing-resume">
+                            Use my uploaded profile resume (<span id="existing-resume-name">resume.pdf</span>)
+                        </label>
+                    </div>
+                    <span class="text-secondary small d-block mt-1" id="resume-help-text">
+                        Accepted formats: PDF, DOC, DOCX. Max size: 5MB.
+                    </span>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Cover Letter</label>
+                    <textarea id="cover-letter" class="form-control form-control-custom" rows="5" placeholder="Write briefly why you are a good fit for this role..." required></textarea>
+                </div>
+                
+                <button type="submit" id="submitBtn" class="btn btn-premium btn-premium-secondary w-100 py-3">
+                    <i class="bi bi-check-circle-fill"></i> Submit Application
+                </button>
+            </form>
+            
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Auth check
+            const user = Session.checkAuth('seeker');
+            if (!user) return;
+
+            // Get job ID from query parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const jobId = urlParams.get('jobId');
+
+            if (!jobId) {
+                showToast("Job vacancy parameter is missing", "error");
+                setTimeout(() => window.location.href = 'jobs.html', 1500);
+                return;
+            }
+
+            // Update Back Cancel button to point back to details
+            document.getElementById('back-btn').href = `job-details.html?id=${jobId}`;
+
+            let jobDetails = null;
+            let seekerProfile = null;
+
+            try {
+                // Fetch job and seeker profile in parallel
+                const [jobData, profileData] = await Promise.all([
+                    API.jobs.get(jobId),
+                    API.profile.getSeeker(user.email)
+                ]);
+
+                jobDetails = jobData.job;
+                seekerProfile = profileData.profile;
+
+                // Bind fields
+                document.getElementById('job-title').value = jobDetails.title;
+                document.getElementById('full-name').value = seekerProfile.name;
+                document.getElementById('email').value = seekerProfile.email;
+
+                // Handle default/uploaded resume checklist
+                const useExistingWrapper = document.getElementById('use-existing-resume-wrapper');
+                if (seekerProfile.resume) {
+                    useExistingWrapper.style.display = 'block';
+                    document.getElementById('existing-resume-name').innerText = seekerProfile.resume;
+                    document.getElementById('resume-file').required = false;
+                } else {
+                    document.getElementById('resume-file').required = true;
+                }
+
+                // Hide spinner & show form
+                document.getElementById('loading-spinner').classList.add('d-none');
+                document.getElementById('applyForm').classList.remove('d-none');
+
+            } catch (err) {
+                console.error("Form initialization error:", err);
+                document.getElementById('loading-spinner').innerHTML = `
+                    <div class="text-danger py-4">
+                        <i class="bi bi-exclamation-triangle-fill fs-2"></i>
+                        <p class="mt-2">Failed to initialize the form. Please try again later.</p>
+                        <a href="jobs.html" class="btn btn-sm btn-primary">Back to Jobs</a>
+                    </div>
+                `;
+            }
+
+            // Form Submit Handler
+            const form = document.getElementById('applyForm');
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+
+                const fullName = document.getElementById('full-name').value.trim();
+                const coverLetter = document.getElementById('cover-letter').value.trim();
+                const fileInput = document.getElementById('resume-file');
+                const checkboxUseExisting = document.getElementById('use-existing-resume');
+
+                let finalResumeFilename = seekerProfile.resume || '';
+
+                try {
+                    // Check if new file was selected
+                    if (fileInput.files.length > 0) {
+                        showToast("Uploading resume file first...", "info");
+                        const uploadRes = await API.profile.uploadResume(user.email, fileInput.files[0]);
+                        finalResumeFilename = uploadRes.filename;
+                    } else if (seekerProfile.resume && checkboxUseExisting && checkboxUseExisting.checked) {
+                        // Use existing resume
+                        finalResumeFilename = seekerProfile.resume;
+                    } else {
+                        // If file was required and not chosen
+                        throw new Error("Please upload a resume file.");
+                    }
+
+                    // Submit application
+                    const appData = {
+                        jobId: jobDetails.id,
+                        jobTitle: jobDetails.title,
+                        companyEmail: jobDetails.companyEmail,
+                        companyName: jobDetails.companyName,
+                        seekerEmail: user.email,
+                        seekerName: fullName,
+                        coverLetter: coverLetter,
+                        resume: finalResumeFilename
+                    };
+
+                    const response = await API.applications.submit(appData);
+                    showToast(response.message || "Application submitted successfully!", "success");
+
+                    setTimeout(() => {
+                        window.location.href = 'my-applications.html';
+                    }, 1200);
+
+                } catch (err) {
+                    console.error("Application submission failed:", err);
+                    // Reset submit button state
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> Submit Application';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

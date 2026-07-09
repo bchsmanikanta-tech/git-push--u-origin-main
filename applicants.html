@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidate Applications - Smart Job Finder</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    
+    <!-- Custom Style System -->
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="js/api.js" defer></script>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-custom company-nav">
+        <div class="container">
+            <span class="navbar-brand">
+                <i class="bi bi-people-fill"></i> Job Applicants
+            </span>
+            <div>
+                <a href="company-dashboard.html" class="btn btn-outline-success me-2">
+                    <i class="bi bi-house"></i> Dashboard
+                </a>
+                <button class="btn btn-outline-danger btn-logout">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div class="d-flex flex-column align-items-center mb-5">
+            <h2 class="fw-bold text-success">Manage Candidate Applications</h2>
+            <p class="text-secondary mb-0">Evaluate applications, check qualifications, and select suitable candidates</p>
+        </div>
+
+        <div class="premium-card p-4">
+            <div id="loading-spinner" class="text-center py-5">
+                <div class="spinner-border text-success" role="status"></div>
+                <p class="text-secondary mt-2">Loading applications...</p>
+            </div>
+
+            <div id="table-wrapper" class="table-custom-container d-none">
+                <table class="table table-custom text-center mb-0">
+                    <thead>
+                        <tr>
+                            <th>Candidate Name</th>
+                            <th>Email Address</th>
+                            <th>Applied Position</th>
+                            <th>Cover Letter</th>
+                            <th>Submitted Resume</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="applicants-tbody">
+                        <!-- Injected dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="no-applicants" class="text-center py-5 d-none">
+                <i class="bi bi-person-x fs-1 text-secondary mb-3 d-block"></i>
+                <h4 class="fw-bold text-dark">No Applications Found</h4>
+                <p class="text-secondary">No candidates have applied to your job vacancies yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cover Letter Modal -->
+    <div class="modal fade" id="letterModal" tabindex="-1" aria-labelledby="letterModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content" style="border-radius: 16px;">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="letterModalLabel">Candidate Cover Letter</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-secondary small mb-1">Submitted by: <strong id="letter-candidate" class="text-dark">Candidate</strong></p>
+                    <hr class="mt-1 mb-3 text-slate-200">
+                    <p class="text-slate-800 lh-lg" style="white-space: pre-wrap;" id="letter-content">
+                        No letter contents details.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Auth check
+            const user = Session.checkAuth('company');
+            if (!user) return;
+
+            let companyApps = [];
+            const tbody = document.getElementById('applicants-tbody');
+            const spinner = document.getElementById('loading-spinner');
+            const tableWrapper = document.getElementById('table-wrapper');
+            const noAppsBox = document.getElementById('no-applicants');
+
+            // Load Applicants
+            async function loadApplicantsList() {
+                tbody.innerHTML = '';
+                spinner.classList.remove('d-none');
+                tableWrapper.classList.add('d-none');
+                noAppsBox.classList.add('d-none');
+
+                try {
+                    const data = await API.applications.getForCompany(user.email);
+                    companyApps = data.applications;
+
+                    spinner.classList.add('d-none');
+
+                    if (companyApps.length === 0) {
+                        noAppsBox.classList.remove('d-none');
+                        return;
+                    }
+
+                    // Render rows (reverse to show recent first)
+                    [...companyApps].reverse().forEach(app => {
+                        let statusBadgeClass = 'badge-pending';
+                        if (app.status === 'Selected') statusBadgeClass = 'badge-selected';
+                        if (app.status === 'Rejected') statusBadgeClass = 'badge-rejected';
+
+                        const resumeLink = app.resume 
+                            ? `<a href="/uploads/${app.resume}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3">
+                                    <i class="bi bi-file-pdf"></i> View File
+                               </a>` 
+                            : '<span class="text-secondary small">No resume</span>';
+
+                        const letterBtn = app.coverLetter
+                            ? `<button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="openLetterModal('${app.id}')">
+                                    <i class="bi bi-chat-text"></i> Read Letter
+                               </button>`
+                            : '<span class="text-secondary small">-</span>';
+
+                        let actionControls = '';
+                        if (app.status === 'Pending') {
+                            actionControls = `
+                                <div class="d-flex justify-content-center gap-1">
+                                    <button class="btn btn-sm btn-success px-3 rounded-3 fw-semibold" onclick="updateStatus('${app.id}', 'Selected')">
+                                        Accept
+                                    </button>
+                                    <button class="btn btn-sm btn-danger px-3 rounded-3 fw-semibold" onclick="updateStatus('${app.id}', 'Rejected')">
+                                        Reject
+                                    </button>
+                                </div>
+                            `;
+                        } else {
+                            actionControls = `<span class="text-secondary small fw-medium">Evaluated</span>`;
+                        }
+
+                        tbody.innerHTML += `
+                            <tr id="app-row-${app.id}">
+                                <td class="fw-bold text-slate-800">${app.seekerName}</td>
+                                <td class="small text-secondary">${app.seekerEmail}</td>
+                                <td class="fw-semibold">${app.jobTitle}</td>
+                                <td>${letterBtn}</td>
+                                <td>${resumeLink}</td>
+                                <td>
+                                    <span class="badge-custom ${statusBadgeClass}" id="badge-${app.id}">
+                                        <i class="bi bi-circle-fill" style="font-size: 8px;"></i> ${app.status}
+                                    </span>
+                                </td>
+                                <td id="actions-${app.id}">${actionControls}</td>
+                            </tr>
+                        `;
+                    });
+
+                    tableWrapper.classList.remove('d-none');
+
+                } catch (err) {
+                    spinner.innerHTML = `<span class="text-danger small">Failed to load applicants list.</span>`;
+                }
+            }
+
+            // Load list on boot
+            loadApplicantsList();
+
+            // Modal viewer for cover letters
+            window.openLetterModal = function(appId) {
+                const app = companyApps.find(a => a.id === appId);
+                if (!app) return;
+
+                document.getElementById('letter-candidate').innerText = `${app.seekerName} (${app.seekerEmail})`;
+                document.getElementById('letter-content').innerText = app.coverLetter;
+
+                const letterModal = new bootstrap.Modal(document.getElementById('letterModal'));
+                letterModal.show();
+            };
+
+            // Accept / Reject Actions
+            window.updateStatus = async function(appId, newStatus) {
+                try {
+                    const res = await API.applications.updateStatus(appId, newStatus);
+                    showToast(res.message || `Application status updated to ${newStatus}`, "success");
+                    
+                    // Update table UI elements dynamically instead of full reload for clean transition
+                    const badge = document.getElementById(`badge-${appId}`);
+                    const actionsCell = document.getElementById(`actions-${appId}`);
+
+                    if (badge) {
+                        badge.className = `badge-custom badge-${newStatus.toLowerCase()}`;
+                        badge.innerHTML = `<i class="bi bi-circle-fill" style="font-size: 8px;"></i> ${newStatus}`;
+                    }
+
+                    if (actionsCell) {
+                        actionsCell.innerHTML = `<span class="text-secondary small fw-medium">Evaluated</span>`;
+                    }
+
+                    // Update memory state
+                    const appObj = companyApps.find(a => a.id === appId);
+                    if (appObj) appObj.status = newStatus;
+
+                } catch (err) {
+                    // Handled inside api.js
+                }
+            };
+        });
+    </script>
+</body>
+</html>

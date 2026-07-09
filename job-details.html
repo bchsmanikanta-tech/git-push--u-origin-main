@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Details - Smart Job Finder</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    
+    <!-- Custom Style System -->
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="js/api.js" defer></script>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-custom jobseeker-nav">
+        <div class="container">
+            <span class="navbar-brand">
+                <i class="bi bi-briefcase"></i> Job Details
+            </span>
+            <div>
+                <a href="jobs.html" class="btn btn-outline-primary me-2">
+                    <i class="bi bi-arrow-left"></i> Back to Jobs
+                </a>
+                <button class="btn btn-outline-danger btn-logout">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div id="loading-spinner" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-secondary mt-2">Loading job details...</p>
+        </div>
+
+        <div id="details-card-container" class="premium-card p-4 p-md-5 d-none">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+                <div>
+                    <h1 class="fw-bold text-primary mb-1" id="job-title">Job Title</h1>
+                    <h4 class="text-secondary fw-semibold" id="company-name">Company Name</h4>
+                </div>
+                <div id="apply-btn-wrapper">
+                    <!-- Dynamic button injected here -->
+                </div>
+            </div>
+            
+            <hr class="text-slate-200">
+
+            <div class="row g-4 mt-2">
+                <div class="col-md-7 col-lg-8">
+                    <!-- Info Grid -->
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded-3 d-flex align-items-center gap-3">
+                                <i class="bi bi-geo-alt-fill text-primary fs-3"></i>
+                                <div>
+                                    <small class="text-secondary d-block">Location</small>
+                                    <span class="fw-bold" id="job-location">Hyderabad</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded-3 d-flex align-items-center gap-3">
+                                <i class="bi bi-currency-rupee text-success fs-3"></i>
+                                <div>
+                                    <small class="text-secondary d-block">Salary Package</small>
+                                    <span class="fw-bold text-success" id="job-salary">₹6 LPA</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded-3 d-flex align-items-center gap-3">
+                                <i class="bi bi-clock-fill text-warning fs-3"></i>
+                                <div>
+                                    <small class="text-secondary d-block">Job Type</small>
+                                    <span class="fw-bold" id="job-type">Full Time</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded-3 d-flex align-items-center gap-3">
+                                <i class="bi bi-person-workspace text-danger fs-3"></i>
+                                <div>
+                                    <small class="text-secondary d-block">Experience Required</small>
+                                    <span class="fw-bold" id="job-experience">Fresher</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Job Description -->
+                    <div class="mt-5">
+                        <h4 class="fw-bold mb-3"><i class="bi bi-file-earmark-text text-primary me-2"></i>Job Description</h4>
+                        <p class="text-slate-700 lh-lg" style="white-space: pre-wrap;" id="job-description">
+                            Loading job responsibilities and details...
+                        </p>
+                    </div>
+
+                    <!-- About Company -->
+                    <div class="mt-5">
+                        <h4 class="fw-bold mb-3"><i class="bi bi-building text-primary me-2"></i>About Company</h4>
+                        <p class="text-slate-600 lh-lg" id="company-about">
+                            Loading company description...
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-5 col-lg-4">
+                    <!-- Skills Needed Box -->
+                    <div class="p-4 bg-light rounded-4 border border-slate-200">
+                        <h5 class="fw-bold mb-3"><i class="bi bi-tools text-primary me-2"></i>Required Skills</h5>
+                        <div class="d-flex flex-wrap gap-2" id="job-skills-container">
+                            <!-- Badges injected -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Auth check
+            const user = Session.checkAuth('seeker');
+            if (!user) return;
+
+            // Get job ID from URL query parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const jobId = urlParams.get('id');
+
+            if (!jobId) {
+                showToast("Job identifier is missing in query string", "error");
+                setTimeout(() => window.location.href = 'jobs.html', 1500);
+                return;
+            }
+
+            try {
+                // Fetch job details
+                const jobData = await API.jobs.get(jobId);
+                const job = jobData.job;
+
+                // Fetch seeker profile (for company about fallback if empty, but server handles it)
+                const compProfileData = await API.profile.getCompany(job.companyEmail).catch(() => null);
+
+                // Check if already applied
+                const appsData = await API.applications.getForSeeker(user.email);
+                const alreadyApplied = appsData.applications.some(app => app.jobId === jobId);
+
+                // Populate fields
+                document.getElementById('job-title').innerText = job.title;
+                document.getElementById('company-name').innerText = job.companyName;
+                document.getElementById('job-location').innerText = job.location;
+                document.getElementById('job-salary').innerText = job.salary;
+                document.getElementById('job-type').innerText = job.type;
+                document.getElementById('job-experience').innerText = job.experience;
+                document.getElementById('job-description').innerText = job.description;
+                
+                // Set company about
+                document.getElementById('company-about').innerText = 
+                    (compProfileData && compProfileData.profile.about) 
+                    ? compProfileData.profile.about 
+                    : `${job.companyName} is an industry leader dedicated to building outstanding client solutions and fostering great career growth.`;
+
+                // Render skills badges
+                const skillsContainer = document.getElementById('job-skills-container');
+                skillsContainer.innerHTML = '';
+                
+                const skillsArray = job.skills.split(',').map(s => s.trim()).filter(Boolean);
+                if (skillsArray.length === 0) {
+                    skillsContainer.innerHTML = '<span class="text-secondary small">No specific skills listed</span>';
+                } else {
+                    skillsArray.forEach(skill => {
+                        skillsContainer.innerHTML += `
+                            <span class="badge bg-primary px-3 py-2 fs-6 rounded-pill">${skill}</span>
+                        `;
+                    });
+                }
+
+                // Render Action Button
+                const btnWrapper = document.getElementById('apply-btn-wrapper');
+                if (alreadyApplied) {
+                    btnWrapper.innerHTML = `
+                        <button class="btn btn-secondary btn-premium py-3 px-4" disabled>
+                            <i class="bi bi-check-all fs-5"></i> Already Applied
+                        </button>
+                    `;
+                } else {
+                    btnWrapper.innerHTML = `
+                        <a href="apply-jobs.html?jobId=${jobId}" class="btn btn-premium btn-premium-secondary py-3 px-4 shadow">
+                            <i class="bi bi-send-fill fs-5"></i> Apply Now
+                        </a>
+                    `;
+                }
+
+                // Toggle visibility
+                document.getElementById('loading-spinner').classList.add('d-none');
+                document.getElementById('details-card-container').classList.remove('d-none');
+
+            } catch (err) {
+                console.error("Job details loading failed:", err);
+                document.getElementById('loading-spinner').innerHTML = `
+                    <div class="text-danger py-5">
+                        <i class="bi bi-exclamation-triangle-fill fs-1"></i>
+                        <h4 class="mt-3">Job details could not be retrieved</h4>
+                        <p class="text-secondary">It might have been deleted or the server is offline.</p>
+                        <a href="jobs.html" class="btn btn-primary mt-3">Back to Jobs</a>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

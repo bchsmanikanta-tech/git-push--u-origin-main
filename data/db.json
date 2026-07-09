@@ -1,0 +1,191 @@
+{
+  "jobseekers": [
+    {
+      "name": "Rahul Kumar",
+      "email": "rahul@gmail.com",
+      "password": "password",
+      "qualification": "Diploma CSE",
+      "skills": "HTML, CSS, JavaScript, Bootstrap",
+      "resume": "",
+      "coverLetter": ""
+    },
+    {
+      "name": "Anjali Sharma",
+      "email": "anjali@gmail.com",
+      "password": "password",
+      "qualification": "B.Tech CSE",
+      "skills": "Java, Spring Boot, MySQL",
+      "resume": "",
+      "coverLetter": ""
+    },
+    {
+      "name": "Test User",
+      "email": "test@test.com",
+      "password": "pass123",
+      "qualification": "",
+      "skills": "",
+      "resume": "",
+      "coverLetter": ""
+    },
+    {
+      "name": "New Seeker",
+      "email": "newseeker@test.com",
+      "password": "pass123",
+      "qualification": "",
+      "skills": "",
+      "resume": "",
+      "coverLetter": ""
+    },
+    {
+      "name": "b manikanta",
+      "email": "b.chs.manikanta@gmail.com",
+      "password": "MANI@143",
+      "qualification": "",
+      "skills": "",
+      "resume": "resume-1783593518872-926935932.jpg",
+      "coverLetter": ""
+    }
+  ],
+  "companies": [
+    {
+      "name": "ABC Technologies",
+      "email": "abc@gmail.com",
+      "password": "password",
+      "phone": "+91 9876543210",
+      "location": "Hyderabad, India",
+      "industry": "Information Technology",
+      "about": "ABC Technologies provides software solutions and creates career opportunities for talented professionals."
+    },
+    {
+      "name": "Tech Solutions",
+      "email": "tech@gmail.com",
+      "password": "password",
+      "phone": "+91 8765432109",
+      "location": "Bengaluru, India",
+      "industry": "Software Engineering",
+      "about": "Tech Solutions is a leading software engineering firm specializing in enterprise Java applications."
+    },
+    {
+      "name": "b manikanta",
+      "email": "b.chs.manikanta@gmail.com",
+      "password": "000000",
+      "phone": "",
+      "location": "",
+      "industry": "",
+      "about": ""
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job_1",
+      "title": "Frontend Developer",
+      "companyEmail": "abc@gmail.com",
+      "companyName": "ABC Technologies",
+      "location": "Hyderabad",
+      "salary": "₹6 LPA",
+      "type": "Full Time",
+      "skills": "HTML, CSS, JavaScript, Bootstrap",
+      "description": "We are looking for a Frontend Developer who can design and develop responsive websites. The candidate should have knowledge of HTML, CSS, JavaScript and modern web technologies.",
+      "experience": "Fresher",
+      "status": "Active",
+      "createdAt": "2026-07-01T10:00:00.000Z"
+    },
+    {
+      "id": "job_2",
+      "title": "Java Developer",
+      "companyEmail": "tech@gmail.com",
+      "companyName": "Tech Solutions",
+      "location": "Bengaluru",
+      "salary": "₹8 LPA",
+      "type": "Hybrid",
+      "skills": "Java, Spring Boot, Hibernate, SQL",
+      "description": "Join our back-end development team working on high-performance enterprise Java applications. You will write clean, well-tested code and collaborate with frontend developers.",
+      "experience": "1-2 Years",
+      "status": "Active",
+      "createdAt": "2026-07-02T10:00:00.000Z"
+    },
+    {
+      "id": "job_3",
+      "title": "Data Analyst",
+      "companyEmail": "abc@gmail.com",
+      "companyName": "ABC Technologies",
+      "location": "Chennai",
+      "salary": "₹7 LPA",
+      "type": "Remote",
+      "skills": "Python, SQL, Tableau, Pandas",
+      "description": "We are looking for a Data Analyst to join our business intelligence team. You will gather requirements, analyze datasets, build dashboards, and provide data-driven insights.",
+      "experience": "1-2 Years",
+      "status": "Active",
+      "createdAt": "2026-07-03T10:00:00.000Z"
+    },
+    {
+      "id": "job_4",
+      "title": "UI/UX Designer",
+      "companyEmail": "tech@gmail.com",
+      "companyName": "Tech Solutions",
+      "location": "Pune",
+      "salary": "₹5 LPA",
+      "type": "Full Time",
+      "skills": "Figma, Adobe XD, Prototyping, Wireframing",
+      "description": "We are looking for a creative UI/UX Designer to design elegant interfaces for our web and mobile applications. You will design user flows, wireframes, prototypes, and UI specifications.",
+      "experience": "Fresher",
+      "status": "Active",
+      "createdAt": "2026-07-04T10:00:00.000Z"
+    },
+    {
+      "id": "job_1783593026999",
+      "title": "FRONT END DEVELOPER",
+      "companyEmail": "b.chs.manikanta@gmail.com",
+      "companyName": "b manikanta",
+      "location": "HYDERABAD",
+      "salary": "6LPA",
+      "type": "Full Time",
+      "skills": "java",
+      "description": "FRESHERS",
+      "experience": "Fresher",
+      "status": "Active",
+      "createdAt": "2026-07-09T10:30:27.000Z"
+    }
+  ],
+  "applications": [
+    {
+      "id": "app_1",
+      "jobId": "job_1",
+      "jobTitle": "Frontend Developer",
+      "companyEmail": "abc@gmail.com",
+      "companyName": "ABC Technologies",
+      "seekerEmail": "rahul@gmail.com",
+      "seekerName": "Rahul Kumar",
+      "appliedDate": "08-07-2026",
+      "resume": "rahul_resume.pdf",
+      "coverLetter": "Hi, I am Rahul. I have good knowledge of HTML, CSS, JavaScript, and Bootstrap. Please review my profile and resume.",
+      "status": "Pending"
+    },
+    {
+      "id": "app_2",
+      "jobId": "job_2",
+      "jobTitle": "Java Developer",
+      "companyEmail": "tech@gmail.com",
+      "companyName": "Tech Solutions",
+      "seekerEmail": "anjali@gmail.com",
+      "seekerName": "Anjali Sharma",
+      "appliedDate": "05-07-2026",
+      "resume": "anjali_resume.pdf",
+      "coverLetter": "Hello, I am Anjali. I am a B.Tech graduate in Computer Science. I specialize in Java, Spring Boot, and database systems. I would love to join your team.",
+      "status": "Selected"
+    },
+    {
+      "id": "app_1783593518954",
+      "jobId": "job_1783593026999",
+      "jobTitle": "FRONT END DEVELOPER",
+      "companyEmail": "b.chs.manikanta@gmail.com",
+      "companyName": "b manikanta",
+      "seekerEmail": "b.chs.manikanta@gmail.com",
+      "seekerName": "b manikanta",
+      "appliedDate": "09-07-2026",
+      "resume": "resume-1783593518872-926935932.jpg",
+      "coverLetter": "FRESHER",
+      "status": "Selected"
+    }
+  ]
+}
