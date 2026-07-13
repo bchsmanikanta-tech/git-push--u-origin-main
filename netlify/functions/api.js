@@ -6,6 +6,7 @@ let dbInitialized = false;
 
 // Wrapper to ensure DB is initialized before handling any requests
 const handler = async (event, context) => {
+  context.callbackWaitsForEmptyEventLoop = false;
   if (!dbInitialized) {
     await initDatabase();
     dbInitialized = true;
