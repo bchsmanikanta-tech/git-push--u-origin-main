@@ -295,7 +295,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => { localStor
 document.getElementById('sidebarToggle').addEventListener('click', () => document.getElementById('adminSidebar').classList.toggle('show'));
 
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
-const BASE = isLocal ? 'http://localhost:5000' : 'https://YOUR-APP-NAME.onrender.com';
+const BASE = isLocal ? 'http://localhost:5000' : '';
 const TOKEN = localStorage.getItem('adminToken');
 
 let allUsers = [];

@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const hostname = window.location.hostname;
             const base = window.location.protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1'
                 ? 'http://localhost:5000'
-                : 'https://YOUR-APP-NAME.onrender.com';
+                : '';
 
             const res = await fetch(`${base}/api/admin/auth/login`, {
                 method: 'POST',

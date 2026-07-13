@@ -438,7 +438,7 @@ function getApiBase() {
     if (window.location.protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1') {
         return 'http://localhost:5000';
     }
-    return 'https://YOUR-APP-NAME.onrender.com';
+    return '';
 }
 const BASE = getApiBase();
 
