@@ -2,13 +2,11 @@
 
 // ============================================================
 // 🚀 DEPLOYMENT CONFIGURATION
-// After deploying the backend on Render.com, paste your 
-// Render URL below (e.g. https://smart-job-finder.onrender.com)
+// We now deploy both frontend and backend to Netlify
 // ============================================================
-const RENDER_BACKEND_URL = 'https://YOUR-APP-NAME.onrender.com';
 
 // Auto-detect API base URL:
-// - On Netlify (https://...) → use Render backend URL
+// - On Netlify (https://...) → use /api (which maps to /.netlify/functions/api)
 // - On localhost or file:// → use local server
 const isLocal = window.location.hostname === 'localhost' || 
                 window.location.hostname === '127.0.0.1' || 
@@ -16,7 +14,7 @@ const isLocal = window.location.hostname === 'localhost' ||
 
 const API_BASE = isLocal
     ? 'http://localhost:5000/api'
-    : `${RENDER_BACKEND_URL}/api`;
+    : '/api';
 
 // Show a server-offline banner if we detect file:// protocol (user hasn't started server)
 if (window.location.protocol === 'file:') {

@@ -44,6 +44,30 @@
       "skills": "",
       "resume": "resume-1783593518872-926935932.jpg",
       "coverLetter": ""
+    },
+    {
+      "name": "b manikanta",
+      "email": "bchs.manikanta@gmail.com",
+      "password": "000000",
+      "qualification": "",
+      "skills": "",
+      "resume": "resume-1783794759162-299852888.jpg",
+      "coverLetter": ""
+    },
+    {
+      "_id": "jobseeker_1783791301149",
+      "name": "Sync Test",
+      "email": "sync@test.com",
+      "password": "pass123",
+      "role": "Job Seeker",
+      "status": "Active",
+      "phoneNumber": "",
+      "createdAt": "2026-07-11T17:35:01.144Z",
+      "qualification": "",
+      "skills": "",
+      "resume": "",
+      "coverLetter": "",
+      "phone": ""
     }
   ],
   "companies": [
@@ -68,6 +92,15 @@
     {
       "name": "b manikanta",
       "email": "b.chs.manikanta@gmail.com",
+      "password": "000000",
+      "phone": "",
+      "location": "",
+      "industry": "",
+      "about": ""
+    },
+    {
+      "name": "b manikanta",
+      "email": "bchs.manikanta@gmail.com",
       "password": "000000",
       "phone": "",
       "location": "",
@@ -143,8 +176,24 @@
       "skills": "java",
       "description": "FRESHERS",
       "experience": "Fresher",
-      "status": "Active",
+      "status": "Filled",
       "createdAt": "2026-07-09T10:30:27.000Z"
+    },
+    {
+      "id": "job_1783791301152",
+      "title": "Sync Test Vacancy",
+      "companyEmail": "sync@test.com",
+      "companyName": "Sync User",
+      "location": "Delhi",
+      "salary": "₹5 LPA",
+      "type": "Full Time",
+      "skills": "",
+      "description": "Testing shared storage",
+      "experience": "Fresher",
+      "status": "Filled",
+      "createdAt": "2026-07-11T17:35:01.152Z",
+      "expiresAt": null,
+      "smartDoor": null
     }
   ],
   "applications": [
@@ -186,6 +235,100 @@
       "resume": "resume-1783593518872-926935932.jpg",
       "coverLetter": "FRESHER",
       "status": "Selected"
+    },
+    {
+      "id": "app_1783794759280",
+      "jobId": "job_2",
+      "jobTitle": "Java Developer",
+      "companyEmail": "tech@gmail.com",
+      "companyName": "Tech Solutions",
+      "seekerEmail": "bchs.manikanta@gmail.com",
+      "seekerName": "b manikanta",
+      "appliedDate": "12-07-2026",
+      "resume": "resume-1783794759162-299852888.jpg",
+      "coverLetter": "hi",
+      "status": "Pending"
+    }
+  ],
+  "admins": [
+    {
+      "name": "Super Admin",
+      "email": "admin@jobfinder.com",
+      "password": "Admin@123",
+      "role": "SuperAdmin",
+      "status": "Active"
+    },
+    {
+      "name": "Super Admin",
+      "email": "admin@smartdoor.com",
+      "password": "Admin@123",
+      "role": "Super Admin",
+      "status": "Active"
+    }
+  ],
+  "auditLogs": [
+    {
+      "_id": "log_1783794076434",
+      "adminId": "admin_admin@smartdoor.com",
+      "adminName": "Super Admin",
+      "action": "LOGIN_SUCCESS",
+      "details": "Admin logged in successfully: admin@smartdoor.com",
+      "ipAddress": "::1",
+      "timestamp": "2026-07-11T18:21:16.434Z"
+    },
+    {
+      "_id": "log_1783794100226",
+      "adminId": "admin_admin@smartdoor.com",
+      "adminName": "Super Admin",
+      "action": "LOGIN_SUCCESS",
+      "details": "Admin logged in successfully: admin@smartdoor.com",
+      "ipAddress": "::1",
+      "timestamp": "2026-07-11T18:21:40.226Z"
+    },
+    {
+      "_id": "log_1783794382547",
+      "adminId": "admin_admin@smartdoor.com",
+      "adminName": "Super Admin",
+      "action": "SETTINGS_UPDATE",
+      "details": "System settings were modified",
+      "ipAddress": "::1",
+      "timestamp": "2026-07-11T18:26:22.547Z"
+    },
+    {
+      "_id": "log_1783794396220",
+      "adminId": "admin_admin@smartdoor.com",
+      "adminName": "Super Admin",
+      "action": "VACANCY_FILLED",
+      "details": "Marked vacancy as filled: \"Sync Test Vacancy\"",
+      "ipAddress": "::1",
+      "timestamp": "2026-07-11T18:26:36.220Z"
+    },
+    {
+      "_id": "log_1783794562328",
+      "adminId": "admin_admin@smartdoor.com",
+      "adminName": "Super Admin",
+      "action": "VACANCY_FILLED",
+      "details": "Marked vacancy as filled: \"FRONT END DEVELOPER\"",
+      "ipAddress": "::1",
+      "timestamp": "2026-07-11T18:29:22.328Z"
+    },
+    {
+      "_id": "log_1783794584425",
+      "adminId": "admin_admin@smartdoor.com",
+      "adminName": "Super Admin",
+      "action": "USER_STATUS_CHANGE",
+      "details": "Changed user status for sync@test.com to Blocked",
+      "ipAddress": "::1",
+      "timestamp": "2026-07-11T18:29:44.425Z"
+    },
+    {
+      "_id": "log_1783799588251",
+      "adminId": "admin_admin@smartdoor.com",
+      "adminName": "Super Admin",
+      "action": "USER_STATUS_CHANGE",
+      "details": "Changed user status for sync@test.com to Active",
+      "ipAddress": "::1",
+      "timestamp": "2026-07-11T19:53:08.251Z"
     }
   ]
 }
