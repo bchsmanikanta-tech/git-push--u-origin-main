@@ -10,7 +10,7 @@ const handler = async (event, context) => {
     await initDatabase();
     dbInitialized = true;
   }
-  const serverlessHandler = serverless(app);
+  const serverlessHandler = serverless(app, { basePath: '/.netlify/functions' });
   return serverlessHandler(event, context);
 };
 
