@@ -56,8 +56,12 @@ app.use(express.urlencoded({ extended: true }));
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 // Ensure uploads folder exists
-if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR);
+try {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+        fs.mkdirSync(UPLOADS_DIR);
+    }
+} catch (error) {
+    console.warn('[SERVER] Warning: Could not create uploads directory (filesystem is read-only):', error.message);
 }
 
 // Multer setup for resume upload
