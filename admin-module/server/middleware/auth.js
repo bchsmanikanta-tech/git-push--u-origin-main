@@ -16,7 +16,7 @@ exports.protect = async (req, res, next) => {
   try {
     const secret = process.env.JWT_SECRET || 'dev-admin-secret';
     const decoded = jwt.verify(token, secret);
-    req.admin = getSharedAdminById(decoded.id);
+    req.admin = await getSharedAdminById(decoded.id);
 
     if (!req.admin) {
       return res.status(401).json({ success: false, message: 'Admin not found' });
