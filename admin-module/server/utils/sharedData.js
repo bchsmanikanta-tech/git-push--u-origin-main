@@ -106,8 +106,10 @@ const mapUserRow = (r, source) => ({
 });
 
 const getSharedUsers = async () => {
-  const seekers = await Jobseeker.find().sort({ _id: 1 });
-  const companies = await Company.find().sort({ _id: 1 });
+  const [seekers, companies] = await Promise.all([
+    Jobseeker.find().sort({ _id: 1 }),
+    Company.find().sort({ _id: 1 })
+  ]);
   return [
     ...seekers.map((r) => mapUserRow(r, 'jobseeker')),
     ...companies.map((r) => mapUserRow(r, 'company'))

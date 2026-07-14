@@ -772,10 +772,11 @@ app.post('/api/admin/jobs/bulk', adminAuth, async (req, res) => {
 // 10. Admin – Get All Users (seekers + companies merged)
 app.get('/api/admin/users', adminAuth, async (req, res) => {
     try {
-        const [seekers, companies, applications] = await Promise.all([
+        const [seekers, companies, applications, jobs] = await Promise.all([
             db.listJobseekers(),
             db.listCompanies(),
-            db.listApplications()
+            db.listApplications(),
+            db.listJobs()
         ]);
 
         const seekerUsers = seekers.map(s => {
@@ -792,7 +793,6 @@ app.get('/api/admin/users', adminAuth, async (req, res) => {
             };
         });
 
-        const jobs = await db.listJobs();
         const companyUsers = companies.map(c => {
             const jobCount = jobs.filter(j => j.companyEmail === c.email).length;
             return {
