@@ -72,20 +72,39 @@
     </div>
 
     <script>
-        // Open Base64 resume safely using Blob URL (Chrome blocks data: URL navigation)
-        function openResume(dataUrl) {
-            if (!dataUrl) return;
-            if (dataUrl.startsWith('data:')) {
-                const [header, base64] = dataUrl.split(',');
-                const mime = header.match(/:(.*?);/)[1];
-                const bytes = atob(base64);
-                const arr = new Uint8Array(bytes.length);
-                for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-                const blob = new Blob([arr], { type: mime });
-                const blobUrl = URL.createObjectURL(blob);
-                window.open(blobUrl, '_blank');
-            } else {
-                window.open('/uploads/' + dataUrl, '_blank');
+        // Resume store — maps app ID to Base64 data URL
+        const resumeStore = {};
+
+        // Open or download resume safely — works in all browsers, never blocked
+        function openResume(appId) {
+            const dataUrl = resumeStore[appId];
+            if (!dataUrl) { alert('Resume not available.'); return; }
+
+            try {
+                if (dataUrl.startsWith('data:')) {
+                    // Convert Base64 → Blob → Blob URL → open with <a> click
+                    const [header, base64] = dataUrl.split(',');
+                    const mime = header.match(/:(.*?);/)[1];
+                    const bytes = atob(base64);
+                    const arr = new Uint8Array(bytes.length);
+                    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                    const blob = new Blob([arr], { type: mime });
+                    const blobUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = blobUrl;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    // Revoke after a short delay to allow tab to open
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                } else {
+                    window.location.href = '/uploads/' + dataUrl;
+                }
+            } catch(e) {
+                console.error('Resume open error:', e);
+                alert('Could not open resume. Try downloading it.');
             }
         }
 
@@ -109,34 +128,39 @@
                 const tbody = document.getElementById('applications-tbody');
                 tbody.innerHTML = '';
 
-                // Reverse to show most recent first
+                // Reverse to show most recent first, build rows via DOM (not innerHTML +=)
                 [...apps].reverse().forEach(app => {
                     let badgeClass = 'badge-pending';
                     if (app.status === 'Selected') badgeClass = 'badge-selected';
                     if (app.status === 'Rejected') badgeClass = 'badge-rejected';
 
-                    // Store resume in a map, use index-based key to avoid inline data in onclick
-                    const resumeKey = `resume_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-                    window[resumeKey] = app.resume;
-                    const resumeLink = app.resume 
-                        ? `<button onclick="openResume(window['${resumeKey}'])" class="btn btn-sm btn-outline-info rounded-pill px-3">
-                                <i class="bi bi-file-pdf"></i> View Resume
-                           </button>` 
-                        : '<span class="text-secondary small">No file</span>';
+                    // Store resume data keyed by app ID
+                    if (app.resume) resumeStore[app.id] = app.resume;
 
-                    tbody.innerHTML += `
-                        <tr>
-                            <td class="fw-bold text-slate-800">${app.companyName}</td>
-                            <td class="fw-semibold">${app.jobTitle}</td>
-                            <td>${app.appliedDate}</td>
-                            <td>${resumeLink}</td>
-                            <td>
-                                <span class="badge-custom ${badgeClass}">
-                                    <i class="bi bi-circle-fill" style="font-size: 8px;"></i> ${app.status}
-                                </span>
-                            </td>
-                        </tr>
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="fw-bold text-slate-800">${app.companyName}</td>
+                        <td class="fw-semibold">${app.jobTitle}</td>
+                        <td>${app.appliedDate}</td>
+                        <td>
+                            ${app.resume
+                                ? `<button class="btn btn-sm btn-outline-info rounded-pill px-3 view-resume-btn" data-app-id="${app.id}">
+                                       <i class="bi bi-file-pdf"></i> View Resume
+                                   </button>`
+                                : '<span class="text-secondary small">No file</span>'}
+                        </td>
+                        <td>
+                            <span class="badge-custom ${badgeClass}">
+                                <i class="bi bi-circle-fill" style="font-size: 8px;"></i> ${app.status}
+                            </span>
+                        </td>
                     `;
+                    tbody.appendChild(row);
+                });
+
+                // Attach click listeners AFTER rows are in DOM
+                document.querySelectorAll('.view-resume-btn').forEach(btn => {
+                    btn.addEventListener('click', () => openResume(btn.dataset.appId));
                 });
 
                 document.getElementById('table-wrapper').classList.remove('d-none');

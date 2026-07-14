@@ -93,23 +93,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // Open Base64 resume safely using Blob URL (Chrome blocks data: URL navigation)
-        function openResume(dataUrl) {
-            if (!dataUrl) return;
-            if (dataUrl.startsWith('data:')) {
-                const [header, base64] = dataUrl.split(',');
-                const mime = header.match(/:(.*?);/)[1];
-                const bytes = atob(base64);
-                const arr = new Uint8Array(bytes.length);
-                for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-                const blob = new Blob([arr], { type: mime });
-                const blobUrl = URL.createObjectURL(blob);
-                window.open(blobUrl, '_blank');
-            } else {
-                window.open('/uploads/' + dataUrl, '_blank');
-            }
-        }
-
         document.addEventListener('DOMContentLoaded', () => {
             // Auth check
             const user = Session.checkAuth('company');
@@ -120,6 +103,38 @@
             const spinner = document.getElementById('loading-spinner');
             const tableWrapper = document.getElementById('table-wrapper');
             const noAppsBox = document.getElementById('no-applicants');
+
+            // Resume store — maps app ID to Base64 data URL
+            const resumeStore = {};
+
+            // Open resume safely — anchor click, never blocked by popup blockers
+            function openResume(appId) {
+                const dataUrl = resumeStore[appId];
+                if (!dataUrl) { showToast('No resume file available for this applicant.', 'error'); return; }
+                try {
+                    if (dataUrl.startsWith('data:')) {
+                        const [header, base64] = dataUrl.split(',');
+                        const mime = header.match(/:(.*?);/)[1];
+                        const bytes = atob(base64);
+                        const arr = new Uint8Array(bytes.length);
+                        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                        const blob = new Blob([arr], { type: mime });
+                        const blobUrl = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = blobUrl;
+                        a.target = '_blank';
+                        a.rel = 'noopener noreferrer';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                    } else {
+                        window.location.href = '/uploads/' + dataUrl;
+                    }
+                } catch(e) {
+                    showToast('Could not open resume.', 'error');
+                }
+            }
 
             // Load Applicants
             async function loadApplicantsList() {
@@ -139,58 +154,54 @@
                         return;
                     }
 
-                    // Render rows (reverse to show recent first)
+                    // Build rows via DOM (avoids innerHTML+= re-parse issues)
                     [...companyApps].reverse().forEach(app => {
                         let statusBadgeClass = 'badge-pending';
                         if (app.status === 'Selected') statusBadgeClass = 'badge-selected';
                         if (app.status === 'Rejected') statusBadgeClass = 'badge-rejected';
 
-                        // Store resume in a map key to avoid embedding huge Base64 inline in onclick
-                        const resumeKey = `resume_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-                        window[resumeKey] = app.resume;
-                        const resumeLink = app.resume 
-                            ? `<button onclick="openResume(window['${resumeKey}'])" class="btn btn-sm btn-outline-info rounded-pill px-3">
-                                    <i class="bi bi-file-pdf"></i> View File
-                               </button>` 
-                            : '<span class="text-secondary small">No resume</span>';
+                        if (app.resume) resumeStore[app.id] = app.resume;
 
-                        const letterBtn = app.coverLetter
-                            ? `<button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="openLetterModal('${app.id}')">
-                                    <i class="bi bi-chat-text"></i> Read Letter
-                               </button>`
+                        const letterBtnHtml = app.coverLetter
+                            ? `<button class="btn btn-sm btn-outline-secondary rounded-pill px-3 open-letter-btn" data-app-id="${app.id}"><i class="bi bi-chat-text"></i> Read Letter</button>`
                             : '<span class="text-secondary small">-</span>';
 
                         let actionControls = '';
                         if (app.status === 'Pending') {
                             actionControls = `
                                 <div class="d-flex justify-content-center gap-1">
-                                    <button class="btn btn-sm btn-success px-3 rounded-3 fw-semibold" onclick="updateStatus('${app.id}', 'Selected')">
-                                        Accept
-                                    </button>
-                                    <button class="btn btn-sm btn-danger px-3 rounded-3 fw-semibold" onclick="updateStatus('${app.id}', 'Rejected')">
-                                        Reject
-                                    </button>
-                                </div>
-                            `;
+                                    <button class="btn btn-sm btn-success px-3 rounded-3 fw-semibold status-btn" data-app-id="${app.id}" data-status="Selected">Accept</button>
+                                    <button class="btn btn-sm btn-danger px-3 rounded-3 fw-semibold status-btn" data-app-id="${app.id}" data-status="Rejected">Reject</button>
+                                </div>`;
                         } else {
                             actionControls = `<span class="text-secondary small fw-medium">Evaluated</span>`;
                         }
 
-                        tbody.innerHTML += `
-                            <tr id="app-row-${app.id}">
-                                <td class="fw-bold text-slate-800">${app.seekerName}</td>
-                                <td class="small text-secondary">${app.seekerEmail}</td>
-                                <td class="fw-semibold">${app.jobTitle}</td>
-                                <td>${letterBtn}</td>
-                                <td>${resumeLink}</td>
-                                <td>
-                                    <span class="badge-custom ${statusBadgeClass}" id="badge-${app.id}">
-                                        <i class="bi bi-circle-fill" style="font-size: 8px;"></i> ${app.status}
-                                    </span>
-                                </td>
-                                <td id="actions-${app.id}">${actionControls}</td>
-                            </tr>
+                        const row = document.createElement('tr');
+                        row.id = `app-row-${app.id}`;
+                        row.innerHTML = `
+                            <td class="fw-bold text-slate-800">${app.seekerName}</td>
+                            <td class="small text-secondary">${app.seekerEmail}</td>
+                            <td class="fw-semibold">${app.jobTitle}</td>
+                            <td>${letterBtnHtml}</td>
+                            <td>${app.resume
+                                ? `<button class="btn btn-sm btn-outline-info rounded-pill px-3 view-resume-btn" data-app-id="${app.id}"><i class="bi bi-file-pdf"></i> View File</button>`
+                                : '<span class="text-secondary small">No resume</span>'}</td>
+                            <td><span class="badge-custom ${statusBadgeClass}" id="badge-${app.id}"><i class="bi bi-circle-fill" style="font-size:8px;"></i> ${app.status}</span></td>
+                            <td id="actions-${app.id}">${actionControls}</td>
                         `;
+                        tbody.appendChild(row);
+                    });
+
+                    // Attach event listeners AFTER rows are in the DOM
+                    tbody.querySelectorAll('.view-resume-btn').forEach(btn => {
+                        btn.addEventListener('click', () => openResume(btn.dataset.appId));
+                    });
+                    tbody.querySelectorAll('.open-letter-btn').forEach(btn => {
+                        btn.addEventListener('click', () => openLetterModal(btn.dataset.appId));
+                    });
+                    tbody.querySelectorAll('.status-btn').forEach(btn => {
+                        btn.addEventListener('click', () => updateStatus(btn.dataset.appId, btn.dataset.status));
                     });
 
                     tableWrapper.classList.remove('d-none');
