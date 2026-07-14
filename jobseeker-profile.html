@@ -81,7 +81,7 @@
                             </div>
                             <div>
                                 <h5 class="fw-bold mb-1">Profile Photo</h5>
-                                <p class="text-secondary small mb-0">Upload a professional JPG or PNG photo (max 2MB).</p>
+                                <p class="text-secondary small mb-0">Upload a professional JPG or PNG photo (max 10MB).</p>
                             </div>
                         </div>
 
@@ -135,8 +135,8 @@
             photoInput.addEventListener('change', (e) => {
                 if (e.target.files.length > 0) {
                     const file = e.target.files[0];
-                    if (file.size > 2 * 1024 * 1024) {
-                        showToast("Photo must be less than 2MB", "error");
+                    if (file.size > 10 * 1024 * 1024) {
+                        showToast("Photo must be less than 10MB", "error");
                         photoInput.value = '';
                         return;
                     }
