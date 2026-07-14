@@ -73,6 +73,24 @@ const updateSharedAdminTwoFactor = async (id, enabled) => {
   return row ? mapAdminRow(row) : null;
 };
 
+const mapStatusToFrontend = (dbStatus) => {
+  if (!dbStatus) return 'Active';
+  const s = dbStatus.toLowerCase();
+  if (s === 'active') return 'Active';
+  if (s === 'banned') return 'Blocked';
+  if (s === 'suspended') return 'Suspended';
+  return dbStatus;
+};
+
+const mapStatusToDb = (feStatus) => {
+  if (!feStatus) return 'active';
+  const s = feStatus.toLowerCase();
+  if (s === 'active') return 'active';
+  if (s === 'blocked') return 'banned';
+  if (s === 'suspended') return 'suspended';
+  return feStatus;
+};
+
 // ---------- USERS ----------
 const mapUserRow = (r, source) => ({
   _id: `${source}_${r.email}`,
@@ -80,7 +98,7 @@ const mapUserRow = (r, source) => ({
   name: r.name,
   email: r.email,
   role: source === 'company' ? 'Company' : 'Job Seeker',
-  status: r.status || 'Active',
+  status: mapStatusToFrontend(r.status),
   phoneNumber: r.phone || r.phone_number || '',
   createdAt: r.created_at,
   password: r.password,
@@ -123,7 +141,7 @@ const createSharedUser = async (payload) => {
       email,
       password: payload.password || 'changeme123',
       phone: payload.phoneNumber || '',
-      status: payload.status || 'Active',
+      status: mapStatusToDb(payload.status || 'Active'),
       created_at: now
     });
     return mapUserRow(row, 'company');
@@ -133,7 +151,7 @@ const createSharedUser = async (payload) => {
     name: payload.name || 'New User',
     email,
     password: payload.password || 'changeme123',
-    status: payload.status || 'Active',
+    status: mapStatusToDb(payload.status || 'Active'),
     created_at: now
   });
   return mapUserRow(row, 'jobseeker');
@@ -148,7 +166,7 @@ const updateSharedUser = async (id, payload) => {
   const updateData = {};
   if (payload.name !== undefined) updateData.name = payload.name;
   if (payload.email) updateData.email = payload.email.toLowerCase();
-  if (payload.status !== undefined) updateData.status = payload.status;
+  if (payload.status !== undefined) updateData.status = mapStatusToDb(payload.status);
   if (payload.phoneNumber !== undefined || payload.phone !== undefined) {
     updateData.phone = payload.phoneNumber !== undefined ? payload.phoneNumber : payload.phone;
   }
@@ -170,7 +188,7 @@ const setSharedUserStatus = async (id, status) => {
   const found = await findUserRow(id);
   if (!found) return null;
   const Model = found.source === 'company' ? Company : Jobseeker;
-  const row = await Model.findByIdAndUpdate(found.row._id, { status }, { new: true });
+  const row = await Model.findByIdAndUpdate(found.row._id, { status: mapStatusToDb(status) }, { new: true });
   return row ? mapUserRow(row, found.source) : null;
 };
 
@@ -438,8 +456,6 @@ const listNotifications = async () => {
   const rows = await Notification.find().sort({ created_at: -1 });
   return rows.map(mapNotificationRow);
 };
-
-const mongoose = require('mongoose'); // For ObjectId check
 
 const readSharedDb = async () => {
   const [jobseekers, companies, jobs, applications, admins, doors, logs, reports, notifications] = await Promise.all([
