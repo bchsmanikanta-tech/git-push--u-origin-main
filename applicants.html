@@ -108,8 +108,28 @@
             const resumeStore = {};
 
             // Open resume safely using central helper
-            function openResume(appId) {
-                window.viewResume(resumeStore[appId]);
+            async function openResume(appId) {
+                let dataUrl = resumeStore[appId];
+                if (!dataUrl) {
+                    showToast('No resume file available for this applicant.', 'error');
+                    return;
+                }
+
+                if (!dataUrl.startsWith('data:')) {
+                    const app = companyApps.find(a => a.id === appId);
+                    if (app && app.seekerEmail) {
+                        try {
+                            const profileRes = await API.profile.getSeeker(app.seekerEmail);
+                            if (profileRes && profileRes.profile && profileRes.profile.resume && profileRes.profile.resume.startsWith('data:')) {
+                                dataUrl = profileRes.profile.resume;
+                            }
+                        } catch (err) {
+                            console.error("Failed to fetch seeker profile resume fallback:", err);
+                        }
+                    }
+                }
+
+                window.viewResume(dataUrl);
             }
 
             // Load Applicants

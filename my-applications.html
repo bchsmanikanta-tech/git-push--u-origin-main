@@ -76,8 +76,28 @@
         const resumeStore = {};
 
         // Open or download resume safely using central helper
-        function openResume(appId) {
-            window.viewResume(resumeStore[appId]);
+        async function openResume(appId) {
+            let dataUrl = resumeStore[appId];
+            if (!dataUrl) {
+                alert('Resume not available.');
+                return;
+            }
+
+            if (!dataUrl.startsWith('data:')) {
+                try {
+                    const user = Session.getUser();
+                    if (user && user.email) {
+                        const profileRes = await API.profile.getSeeker(user.email);
+                        if (profileRes && profileRes.profile && profileRes.profile.resume && profileRes.profile.resume.startsWith('data:')) {
+                            dataUrl = profileRes.profile.resume;
+                        }
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch seeker profile resume fallback:", err);
+                }
+            }
+
+            window.viewResume(dataUrl);
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
