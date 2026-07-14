@@ -106,12 +106,12 @@ const updateJobseeker = async (email, fields) => {
   
   if (Object.keys(updateData).length === 0) return getJobseekerByEmail(email);
   
-  const row = await Jobseeker.findOneAndUpdate({ email: email.toLowerCase() }, updateData, { new: true });
+  const row = await Jobseeker.findOneAndUpdate({ email: email.toLowerCase() }, updateData, { returnDocument: 'after' });
   return row ? mapJobseeker(row) : null;
 };
 
 const setJobseekerStatus = async (email, status) => {
-  const row = await Jobseeker.findOneAndUpdate({ email: email.toLowerCase() }, { status }, { new: true });
+  const row = await Jobseeker.findOneAndUpdate({ email: email.toLowerCase() }, { status }, { returnDocument: 'after' });
   return row ? mapJobseeker(row) : null;
 };
 
@@ -150,12 +150,12 @@ const updateCompany = async (email, fields) => {
   if (fields.status !== undefined) updateData.status = fields.status;
 
   if (Object.keys(updateData).length === 0) return getCompanyByEmail(email);
-  const row = await Company.findOneAndUpdate({ email: email.toLowerCase() }, updateData, { new: true });
+  const row = await Company.findOneAndUpdate({ email: email.toLowerCase() }, updateData, { returnDocument: 'after' });
   return row ? mapCompany(row) : null;
 };
 
 const setCompanyStatus = async (email, status) => {
-  const row = await Company.findOneAndUpdate({ email: email.toLowerCase() }, { status }, { new: true });
+  const row = await Company.findOneAndUpdate({ email: email.toLowerCase() }, { status }, { returnDocument: 'after' });
   return row ? mapCompany(row) : null;
 };
 
@@ -202,7 +202,7 @@ const updateJob = async (id, fields) => {
   if (fields.featured !== undefined) updateData.featured = !!fields.featured;
   
   if (Object.keys(updateData).length === 0) return getJobById(id);
-  const row = await Job.findByIdAndUpdate(id, updateData, { new: true });
+  const row = await Job.findByIdAndUpdate(id, updateData, { returnDocument: 'after' });
   return row ? mapJob(row) : null;
 };
 
@@ -213,7 +213,7 @@ const deleteJob = async (id) => {
 };
 
 const setJobStatus = async (id, status) => {
-  const row = await Job.findByIdAndUpdate(id, { status }, { new: true });
+  const row = await Job.findByIdAndUpdate(id, { status }, { returnDocument: 'after' });
   return row ? mapJob(row) : null;
 };
 
@@ -269,7 +269,7 @@ const createApplication = async (data) => {
 };
 
 const setApplicationStatus = async (id, status) => {
-  const row = await Application.findByIdAndUpdate(id, { status }, { new: true });
+  const row = await Application.findByIdAndUpdate(id, { status }, { returnDocument: 'after' });
   return row ? mapApplication(row) : null;
 };
 

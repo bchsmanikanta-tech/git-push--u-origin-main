@@ -136,7 +136,9 @@
                 const useExistingWrapper = document.getElementById('use-existing-resume-wrapper');
                 if (seekerProfile.resume) {
                     useExistingWrapper.style.display = 'block';
-                    document.getElementById('existing-resume-name').innerText = seekerProfile.resume;
+                    // Show a friendly label instead of raw Base64 data URL
+                    const resumeLabel = seekerProfile.resume.startsWith('data:') ? 'Uploaded Resume (on file)' : seekerProfile.resume;
+                    document.getElementById('existing-resume-name').innerText = resumeLabel;
                     document.getElementById('resume-file').required = false;
                 } else {
                     document.getElementById('resume-file').required = true;
@@ -178,7 +180,8 @@
                     if (fileInput.files.length > 0) {
                         showToast("Uploading resume file first...", "info");
                         const uploadRes = await API.profile.uploadResume(user.email, fileInput.files[0]);
-                        finalResumeFilename = uploadRes.filename;
+                        // Use the Base64 data URL (uploadRes.url), not the original filename
+                        finalResumeFilename = uploadRes.url || uploadRes.filename;
                     } else if (seekerProfile.resume && checkboxUseExisting && checkboxUseExisting.checked) {
                         // Use existing resume
                         finalResumeFilename = seekerProfile.resume;
