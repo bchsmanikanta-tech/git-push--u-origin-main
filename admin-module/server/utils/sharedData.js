@@ -1,7 +1,15 @@
 const { Jobseeker, Company, Job, Application, Admin, SmartDoor, AuditLog, Report, Notification } = require('../../../db/models');
+const mongoose = require('mongoose');
 
 const adminEmailFromId = (id) =>
   typeof id === 'string' && id.toLowerCase().startsWith('admin_') ? id.slice(6) : id;
+
+const userEmailFromId = (id) => {
+  if (typeof id !== 'string') return id;
+  if (id.toLowerCase().startsWith('jobseeker_')) return id.slice(10);
+  if (id.toLowerCase().startsWith('company_')) return id.slice(8);
+  return id;
+};
 
 // ---------- ADMINS ----------
 const mapAdminRow = (r) => ({
@@ -89,7 +97,7 @@ const getSharedUsers = async () => {
 };
 
 const findUserRow = async (id) => {
-  const emailCandidate = String(id || '').toLowerCase();
+  const emailCandidate = String(userEmailFromId(id) || '').toLowerCase();
   const q = {
     $or: [
       { _id: mongoose.Types.ObjectId.isValid(id) ? id : null },
