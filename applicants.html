@@ -93,6 +93,23 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        // Open Base64 resume safely using Blob URL (Chrome blocks data: URL navigation)
+        function openResume(dataUrl) {
+            if (!dataUrl) return;
+            if (dataUrl.startsWith('data:')) {
+                const [header, base64] = dataUrl.split(',');
+                const mime = header.match(/:(.*?);/)[1];
+                const bytes = atob(base64);
+                const arr = new Uint8Array(bytes.length);
+                for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                const blob = new Blob([arr], { type: mime });
+                const blobUrl = URL.createObjectURL(blob);
+                window.open(blobUrl, '_blank');
+            } else {
+                window.open('/uploads/' + dataUrl, '_blank');
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             // Auth check
             const user = Session.checkAuth('company');
@@ -128,10 +145,13 @@
                         if (app.status === 'Selected') statusBadgeClass = 'badge-selected';
                         if (app.status === 'Rejected') statusBadgeClass = 'badge-rejected';
 
+                        // Store resume in a map key to avoid embedding huge Base64 inline in onclick
+                        const resumeKey = `resume_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                        window[resumeKey] = app.resume;
                         const resumeLink = app.resume 
-                            ? `<a href="${app.resume.startsWith('data:') ? app.resume : '/uploads/' + app.resume}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3">
+                            ? `<button onclick="openResume(window['${resumeKey}'])" class="btn btn-sm btn-outline-info rounded-pill px-3">
                                     <i class="bi bi-file-pdf"></i> View File
-                               </a>` 
+                               </button>` 
                             : '<span class="text-secondary small">No resume</span>';
 
                         const letterBtn = app.coverLetter
