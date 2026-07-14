@@ -29,7 +29,7 @@ exports.login = async (req, res) => {
   }
 
   try {
-    const admin = verifySharedAdmin(email, password);
+    const admin = await verifySharedAdmin(email, password);
 
     if (!admin) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -65,7 +65,7 @@ exports.login = async (req, res) => {
 // @access  Private
 exports.getMe = async (req, res) => {
   try {
-    const admin = getSharedAdminById(req.admin._id || req.admin.id);
+    const admin = await getSharedAdminById(req.admin._id || req.admin.id);
     res.status(200).json({
       success: true,
       admin
@@ -86,13 +86,13 @@ exports.changePassword = async (req, res) => {
   }
 
   try {
-    const admin = getSharedAdminById(req.admin._id || req.admin.id);
+    const admin = await getSharedAdminById(req.admin._id || req.admin.id);
 
     if (!admin || String(admin.password) !== String(currentPassword)) {
       return res.status(400).json({ success: false, message: 'Incorrect current password' });
     }
 
-    updateSharedAdminPassword(req.admin._id || req.admin.id, newPassword);
+    await updateSharedAdminPassword(req.admin._id || req.admin.id, newPassword);
 
     await logAction(req, 'PASSWORD_CHANGE', `Admin changed password successfully: ${admin.email}`);
 
@@ -109,7 +109,7 @@ exports.forgotPassword = async (req, res) => {
   const { email } = req.body;
 
   try {
-    const admin = getSharedAdminByEmail(email);
+    const admin = await getSharedAdminByEmail(email);
 
     if (!admin) {
       return res.status(404).json({ success: false, message: 'No admin found with that email' });
@@ -132,9 +132,9 @@ exports.forgotPassword = async (req, res) => {
 // @access  Private
 exports.toggle2FA = async (req, res) => {
   try {
-    const admin = getSharedAdminById(req.admin._id || req.admin.id);
+    const admin = await getSharedAdminById(req.admin._id || req.admin.id);
     const nextValue = !admin.twoFactorEnabled;
-    updateSharedAdminTwoFactor(req.admin._id || req.admin.id, nextValue);
+    await updateSharedAdminTwoFactor(req.admin._id || req.admin.id, nextValue);
 
     await logAction(req, '2FA_TOGGLE', `Admin 2FA set to ${nextValue}`);
 

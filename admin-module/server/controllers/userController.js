@@ -42,7 +42,7 @@ exports.getUsers = async (req, res) => {
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const sharedUsers = getSharedUsers();
+    const sharedUsers = await getSharedUsers();
     const filteredUsers = sharedUsers.filter((user) => {
       if (search) {
         const term = search.toLowerCase();
@@ -80,7 +80,7 @@ exports.getUsers = async (req, res) => {
 // @access  Private (Admin/SuperAdmin)
 exports.getUser = async (req, res) => {
   try {
-    const sharedUsers = getSharedUsers();
+    const sharedUsers = await getSharedUsers();
     const user = sharedUsers.find((entry) => entry._id === req.params.id || entry.email === req.params.id);
 
     if (!user) {
@@ -105,13 +105,13 @@ exports.createUser = async (req, res) => {
     const { name, email, password, role, phoneNumber } = req.body;
 
     const normalizedEmail = email.toLowerCase();
-    const sharedUsers = getSharedUsers();
+    const sharedUsers = await getSharedUsers();
     const userExists = sharedUsers.some((user) => user.email.toLowerCase() === normalizedEmail);
     if (userExists) {
       return res.status(400).json({ success: false, message: 'User already exists with this email' });
     }
 
-    const user = createSharedUser({ name, email: normalizedEmail, password, role, phoneNumber, status: 'Active' });
+    const user = await createSharedUser({ name, email: normalizedEmail, password, role, phoneNumber, status: 'Active' });
 
     await logAction(req, 'USER_CREATE', `Created user account: ${normalizedEmail}`);
 
@@ -127,7 +127,7 @@ exports.createUser = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { name, email, role, phoneNumber, status } = req.body;
-    const user = updateSharedUser(req.params.id, { name, email, role, phoneNumber, status });
+    const user = await updateSharedUser(req.params.id, { name, email, role, phoneNumber, status });
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -146,7 +146,7 @@ exports.updateUser = async (req, res) => {
 // @access  Private (SuperAdmin Only)
 exports.deleteUser = async (req, res) => {
   try {
-    const deleted = deleteSharedUser(req.params.id);
+    const deleted = await deleteSharedUser(req.params.id);
 
     if (!deleted) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -171,7 +171,7 @@ exports.changeUserStatus = async (req, res) => {
   }
 
   try {
-    const user = setSharedUserStatus(req.params.id, status);
+    const user = await setSharedUserStatus(req.params.id, status);
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -196,7 +196,7 @@ exports.resetUserPassword = async (req, res) => {
   }
 
   try {
-    const user = resetSharedUserPassword(req.params.id, newPassword);
+    const user = await resetSharedUserPassword(req.params.id, newPassword);
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -225,7 +225,7 @@ exports.bulkUserAction = async (req, res) => {
       if (req.admin.role !== 'Super Admin') {
         return res.status(403).json({ success: false, message: 'Only Super Admin can delete users' });
       }
-      bulkSharedUserAction(ids, 'delete');
+      await bulkSharedUserAction(ids, 'delete');
       await logAction(req, 'USER_BULK_DELETE', `Bulk deleted ${ids.length} users`);
       return res.status(200).json({ success: true, message: 'Users deleted successfully' });
     }
@@ -234,7 +234,7 @@ exports.bulkUserAction = async (req, res) => {
       if (!['Active', 'Suspended', 'Blocked'].includes(status)) {
         return res.status(400).json({ success: false, message: 'Invalid status' });
       }
-      bulkSharedUserAction(ids, 'status', status);
+      await bulkSharedUserAction(ids, 'status', status);
       await logAction(req, 'USER_BULK_STATUS', `Bulk updated status of ${ids.length} users to ${status}`);
       return res.status(200).json({ success: true, message: `Users status updated to ${status}` });
     }

@@ -34,7 +34,7 @@ exports.getVacancies = async (req, res) => {
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const sharedVacancies = getSharedVacancies();
+    const sharedVacancies = await getSharedVacancies();
     const filteredVacancies = sharedVacancies.filter((item) => {
       if (search) {
         const term = search.toLowerCase();
@@ -72,7 +72,7 @@ exports.getVacancies = async (req, res) => {
 // @access  Private
 exports.getVacancy = async (req, res) => {
   try {
-    const vacancy = getSharedVacancies().find((item) => item._id === req.params.id);
+    const vacancy = (await getSharedVacancies()).find((item) => item._id === req.params.id);
 
     if (!vacancy) {
       return res.status(404).json({ success: false, message: 'Vacancy not found' });
@@ -91,7 +91,7 @@ exports.createVacancy = async (req, res) => {
   try {
     const { title, description, location, rent, smartDoor, createdBy, expiresAt } = req.body;
 
-    const vacancy = createSharedVacancy({
+    const vacancy = await createSharedVacancy({
       title,
       description,
       location,
@@ -118,7 +118,7 @@ exports.createVacancy = async (req, res) => {
 exports.updateVacancy = async (req, res) => {
   try {
     const { title, description, location, rent, status, smartDoor, expiresAt } = req.body;
-    const vacancy = updateSharedVacancy(req.params.id, { title, description, location, rent, status, smartDoor, expiresAt });
+    const vacancy = await updateSharedVacancy(req.params.id, { title, description, location, rent, status, smartDoor, expiresAt });
 
     if (!vacancy) {
       return res.status(404).json({ success: false, message: 'Vacancy not found' });
@@ -137,13 +137,13 @@ exports.updateVacancy = async (req, res) => {
 // @access  Private (SuperAdmin Only)
 exports.deleteVacancy = async (req, res) => {
   try {
-    const vacancy = getSharedVacancies().find((item) => item._id === req.params.id);
+    const vacancy = (await getSharedVacancies()).find((item) => item._id === req.params.id);
 
     if (!vacancy) {
       return res.status(404).json({ success: false, message: 'Vacancy not found' });
     }
 
-    deleteSharedVacancy(req.params.id);
+    await deleteSharedVacancy(req.params.id);
 
     await logAction(req, 'VACANCY_DELETE', `Deleted vacancy: "${vacancy.title}"`);
 
@@ -164,7 +164,7 @@ exports.approveVacancy = async (req, res) => {
   }
 
   try {
-    const vacancy = updateSharedVacancy(req.params.id, { status });
+    const vacancy = await updateSharedVacancy(req.params.id, { status });
 
     if (!vacancy) {
       return res.status(404).json({ success: false, message: 'Vacancy not found' });
@@ -183,7 +183,7 @@ exports.approveVacancy = async (req, res) => {
 // @access  Private
 exports.markAsFilled = async (req, res) => {
   try {
-    const vacancy = updateSharedVacancy(req.params.id, { status: 'Filled' });
+    const vacancy = await updateSharedVacancy(req.params.id, { status: 'Filled' });
 
     if (!vacancy) {
       return res.status(404).json({ success: false, message: 'Vacancy not found' });
@@ -202,7 +202,7 @@ exports.markAsFilled = async (req, res) => {
 // @access  Private
 exports.archiveExpired = async (req, res) => {
   try {
-    const archivedCount = archiveSharedExpiredVacancies();
+    const archivedCount = await archiveSharedExpiredVacancies();
 
     await logAction(req, 'VACANCY_ARCHIVE_EXPIRED', `Archived ${archivedCount} expired vacancies`);
 
