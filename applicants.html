@@ -107,33 +107,9 @@
             // Resume store — maps app ID to Base64 data URL
             const resumeStore = {};
 
-            // Open resume safely — anchor click, never blocked by popup blockers
+            // Open resume safely using central helper
             function openResume(appId) {
-                const dataUrl = resumeStore[appId];
-                if (!dataUrl) { showToast('No resume file available for this applicant.', 'error'); return; }
-                try {
-                    if (dataUrl.startsWith('data:')) {
-                        const [header, base64] = dataUrl.split(',');
-                        const mime = header.match(/:(.*?);/)[1];
-                        const bytes = atob(base64);
-                        const arr = new Uint8Array(bytes.length);
-                        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-                        const blob = new Blob([arr], { type: mime });
-                        const blobUrl = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = blobUrl;
-                        a.target = '_blank';
-                        a.rel = 'noopener noreferrer';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-                    } else {
-                        window.location.href = '/uploads/' + dataUrl;
-                    }
-                } catch(e) {
-                    showToast('Could not open resume.', 'error');
-                }
+                window.viewResume(resumeStore[appId]);
             }
 
             // Load Applicants

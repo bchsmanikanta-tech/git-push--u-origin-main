@@ -255,6 +255,48 @@ window.API = API;
 window.Session = Session;
 window.showToast = showToast;
 
+// Open or download resume safely (Blob URL or fallback path)
+window.viewResume = function(resumeData) {
+    if (!resumeData) {
+        showToast("No resume file available.", "error");
+        return;
+    }
+
+    try {
+        if (resumeData.startsWith('data:')) {
+            // Convert Base64 → Blob → Blob URL → open with <a> click
+            const [header, base64] = resumeData.split(',');
+            const mime = header.match(/:(.*?);/)[1];
+            const bytes = atob(base64);
+            const arr = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) {
+                arr[i] = bytes.charCodeAt(i);
+            }
+            const blob = new Blob([arr], { type: mime });
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            // Revoke after a short delay to allow tab to open
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+        } else {
+            // Fallback for filename or relative path
+            const isLocal = window.location.hostname === 'localhost' || 
+                            window.location.hostname === '127.0.0.1' || 
+                            window.location.protocol === 'file:';
+            const base = isLocal ? 'http://localhost:5000' : '';
+            window.open(base + '/uploads/' + resumeData, '_blank');
+        }
+    } catch(e) {
+        console.error('Resume view error:', e);
+        showToast('Could not open resume. Try uploading again.', 'error');
+    }
+};
+
 // Hook up logout button automatically if present
 document.addEventListener('DOMContentLoaded', () => {
     ensureToastContainer();
