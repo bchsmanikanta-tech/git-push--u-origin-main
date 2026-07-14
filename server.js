@@ -1,4 +1,9 @@
+// Force Google DNS to ensure MongoDB Atlas SRV record resolves on any network
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
