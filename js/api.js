@@ -269,3 +269,90 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// ============================================================
+// 🌙 THEME MANAGER — Dark / Light Mode
+// ============================================================
+
+const Theme = {
+    KEY: 'sjvf_theme',
+
+    get() {
+        return localStorage.getItem(this.KEY) || 'light';
+    },
+
+    set(mode) {
+        localStorage.setItem(this.KEY, mode);
+        document.documentElement.setAttribute('data-theme', mode);
+        document.body.setAttribute('data-theme', mode);
+        this._updateIcon(mode);
+    },
+
+    toggle() {
+        const next = this.get() === 'dark' ? 'light' : 'dark';
+        this.set(next);
+    },
+
+    // Apply saved theme immediately (called before DOMContentLoaded to prevent FOUC)
+    applyEarly() {
+        const saved = localStorage.getItem(this.KEY) || 'light';
+        document.documentElement.setAttribute('data-theme', saved);
+    },
+
+    _updateIcon(mode) {
+        document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+            const sun  = btn.querySelector('.icon-sun');
+            const moon = btn.querySelector('.icon-moon');
+            if (sun)  sun.style.opacity  = mode === 'dark' ? '0'   : '1';
+            if (moon) moon.style.opacity = mode === 'dark' ? '1'   : '0';
+        });
+    },
+
+    // Inject toggle button into any navbar right before logout button
+    injectToggleButton() {
+        // Avoid double-injection
+        if (document.querySelector('.theme-toggle-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.className = 'theme-toggle-btn me-2';
+        btn.setAttribute('id', 'themeToggleBtn');
+        btn.setAttribute('title', 'Toggle Dark / Light Mode');
+        btn.setAttribute('aria-label', 'Toggle theme');
+        btn.innerHTML = `
+            <i class="bi bi-sun-fill icon-sun"></i>
+            <i class="bi bi-moon-fill icon-moon"></i>
+        `;
+        btn.addEventListener('click', () => this.toggle());
+
+        // Try to insert before logout button in navbar
+        const logoutBtn = document.querySelector('.btn-logout');
+        if (logoutBtn && logoutBtn.parentElement) {
+            logoutBtn.parentElement.insertBefore(btn, logoutBtn);
+        } else {
+            // Fallback: fixed position corner button
+            btn.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9998;width:48px;height:48px;border-radius:50%;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+            document.body.appendChild(btn);
+        }
+
+        // Apply correct icon state on inject
+        this._updateIcon(this.get());
+    },
+
+    init() {
+        this.applyEarly();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.injectToggleButton());
+        } else {
+            this.injectToggleButton();
+        }
+    }
+};
+
+// Apply theme before anything renders to avoid flash of wrong theme
+Theme.applyEarly();
+
+// Initialize fully on load
+Theme.init();
+
+// Expose globally
+window.Theme = Theme;
