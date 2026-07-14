@@ -64,20 +64,11 @@ try {
     console.warn('[SERVER] Warning: Could not create uploads directory (filesystem is read-only):', error.message);
 }
 
-// Multer setup for resume upload
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, UPLOADS_DIR);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
+// Multer setup for memory storage (Netlify compatible)
+const storage = multer.memoryStorage();
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit (ideal for serverless)
 });
 
 // Serve uploaded files statically
@@ -201,10 +192,10 @@ app.get('/api/profile/seeker/:email', async (req, res) => {
 // Update Job Seeker Profile
 app.put('/api/profile/seeker/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
-    const { name, qualification, skills } = req.body;
+    const { name, qualification, skills, photo } = req.body;
 
     try {
-        const updated = await db.updateJobseeker(email, { name, qualification, skills });
+        const updated = await db.updateJobseeker(email, { name, qualification, skills, photo });
         if (!updated) {
             return res.status(404).json({ success: false, message: "Job seeker not found." });
         }
@@ -264,7 +255,7 @@ app.post('/api/profile/upload-resume', (req, res, next) => {
         if (err) {
             if (err instanceof multer.MulterError) {
                 if (err.code === 'LIMIT_FILE_SIZE') {
-                    return res.status(400).json({ success: false, message: "File size limit exceeded. Max limit is 50MB." });
+                    return res.status(400).json({ success: false, message: "File size limit exceeded. Max limit is 10MB." });
                 }
                 return res.status(400).json({ success: false, message: err.message });
             }
@@ -282,7 +273,10 @@ app.post('/api/profile/upload-resume', (req, res, next) => {
     }
 
     try {
-        const updated = await db.updateJobseeker(email.toLowerCase(), { resume: req.file.filename });
+        const base64Data = req.file.buffer.toString('base64');
+        const resumeDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+
+        const updated = await db.updateJobseeker(email.toLowerCase(), { resume: resumeDataUrl });
         if (!updated) {
             return res.status(404).json({ success: false, message: "Job seeker not found." });
         }
@@ -290,10 +284,11 @@ app.post('/api/profile/upload-resume', (req, res, next) => {
         res.json({
             success: true,
             message: "Resume uploaded successfully!",
-            filename: req.file.filename,
-            url: `/uploads/${req.file.filename}`
+            filename: req.file.originalname,
+            url: resumeDataUrl
         });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ success: false, message: "Server error." });
     }
 });

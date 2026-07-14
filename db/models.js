@@ -8,6 +8,7 @@ const JobseekerSchema = new Schema({
   qualification: { type: String, default: '' },
   skills: { type: String, default: '' },
   resume: { type: String, default: '' },
+  photo: { type: String, default: '' },
   cover_letter: { type: String, default: '' },
   status: { type: String, default: 'active' },
   created_at: { type: Date, default: Date.now }

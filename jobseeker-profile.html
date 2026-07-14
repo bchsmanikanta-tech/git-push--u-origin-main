@@ -70,6 +70,21 @@
                     </div>
 
                     <form id="profileForm" class="d-none">
+                        <!-- Profile Photo Section -->
+                        <div class="d-flex align-items-center gap-4 mb-4 pb-3 border-bottom border-slate-100">
+                            <div class="position-relative">
+                                <img id="photo-preview" src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="Profile Photo" class="rounded-circle border border-2 border-primary" style="width: 100px; height: 100px; object-fit: cover;">
+                                <label for="profile-photo-input" class="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center border border-white" style="width: 32px; height: 32px; cursor: pointer;">
+                                    <i class="bi bi-camera-fill" style="font-size: 14px;"></i>
+                                </label>
+                                <input type="file" id="profile-photo-input" class="d-none" accept="image/jpeg,image/png,image/webp">
+                            </div>
+                            <div>
+                                <h5 class="fw-bold mb-1">Profile Photo</h5>
+                                <p class="text-secondary small mb-0">Upload a professional JPG or PNG photo (max 2MB).</p>
+                            </div>
+                        </div>
+
                         <div class="row g-3">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label fw-semibold">Full Name</label>
@@ -112,6 +127,27 @@
 
             const form = document.getElementById('profileForm');
             const spinner = document.getElementById('loading-spinner');
+            const photoInput = document.getElementById('profile-photo-input');
+            const photoPreview = document.getElementById('photo-preview');
+            let photoBase64 = '';
+
+            // Handle Photo Preview & Base64 encoding
+            photoInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    const file = e.target.files[0];
+                    if (file.size > 2 * 1024 * 1024) {
+                        showToast("Photo must be less than 2MB", "error");
+                        photoInput.value = '';
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        photoBase64 = event.target.result;
+                        photoPreview.src = photoBase64;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
 
             try {
                 // Fetch profile details
@@ -123,6 +159,11 @@
                 document.getElementById('email').value = seeker.email;
                 document.getElementById('qualification').value = seeker.qualification;
                 document.getElementById('skills').value = seeker.skills;
+
+                if (seeker.photo) {
+                    photoPreview.src = seeker.photo;
+                    photoBase64 = seeker.photo;
+                }
 
                 // Toggle visibility
                 spinner.classList.add('d-none');
@@ -150,7 +191,12 @@
                 const skills = document.getElementById('skills').value.trim();
 
                 try {
-                    const response = await API.profile.updateSeeker(user.email, { name, qualification, skills });
+                    const response = await API.profile.updateSeeker(user.email, { 
+                        name, 
+                        qualification, 
+                        skills, 
+                        photo: photoBase64 
+                    });
                     showToast(response.message || "Profile updated successfully!", "success");
                     
                     // Update session context (if name changed)

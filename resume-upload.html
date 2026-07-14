@@ -132,9 +132,9 @@
                                 </div>
                             </div>
                             <p class="text-secondary small mb-3">
-                                Filename: <span class="fw-semibold text-dark">${seeker.resume}</span>
+                                Filename: <span class="fw-semibold text-dark">${seeker.resume.startsWith('data:') ? 'Uploaded Resume' : seeker.resume}</span>
                             </p>
-                            <a href="/uploads/${seeker.resume}" target="_blank" class="btn btn-premium btn-premium-primary w-100 py-2.5">
+                            <a href="${seeker.resume.startsWith('data:') ? seeker.resume : '/uploads/' + seeker.resume}" target="_blank" class="btn btn-premium btn-premium-primary w-100 py-2.5">
                                 <i class="bi bi-eye"></i> View Current Resume
                             </a>
                         `;

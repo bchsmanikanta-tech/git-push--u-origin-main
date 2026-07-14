@@ -9,6 +9,7 @@ const mapJobseeker = (r) => ({
   qualification: r.qualification,
   skills: r.skills,
   resume: r.resume,
+  photo: r.photo || '',
   coverLetter: r.cover_letter,
   status: r.status,
   createdAt: r.created_at
@@ -99,6 +100,7 @@ const updateJobseeker = async (email, fields) => {
   if (fields.qualification !== undefined) updateData.qualification = fields.qualification;
   if (fields.skills !== undefined) updateData.skills = fields.skills;
   if (fields.resume !== undefined) updateData.resume = fields.resume;
+  if (fields.photo !== undefined) updateData.photo = fields.photo;
   if (fields.coverLetter !== undefined) updateData.cover_letter = fields.coverLetter;
   if (fields.status !== undefined) updateData.status = fields.status;
   

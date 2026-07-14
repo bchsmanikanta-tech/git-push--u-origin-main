@@ -128,7 +128,7 @@
                         if (app.status === 'Rejected') statusBadgeClass = 'badge-rejected';
 
                         const resumeLink = app.resume 
-                            ? `<a href="/uploads/${app.resume}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3">
+                            ? `<a href="${app.resume.startsWith('data:') ? app.resume : '/uploads/' + app.resume}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3">
                                     <i class="bi bi-file-pdf"></i> View File
                                </a>` 
                             : '<span class="text-secondary small">No resume</span>';
