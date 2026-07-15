@@ -192,6 +192,15 @@ const API = {
                 method: 'POST',
                 body: formData
             });
+        },
+        async uploadCertificate(fileObj) {
+            const formData = new FormData();
+            formData.append('certificate', fileObj);
+
+            return apiRequest('/profile/upload-certificate', {
+                method: 'POST',
+                body: formData
+            });
         }
     },
 
@@ -201,6 +210,11 @@ const API = {
             const params = new URLSearchParams();
             if (filters.title) params.append('title', filters.title);
             if (filters.location) params.append('location', filters.location);
+            if (filters.type) params.append('type', filters.type);
+            if (filters.experience) params.append('experience', filters.experience);
+            if (filters.minSalary) params.append('minSalary', filters.minSalary);
+            if (filters.page) params.append('page', filters.page);
+            if (filters.limit) params.append('limit', filters.limit);
             
             const queryStr = params.toString() ? `?${params.toString()}` : '';
             return apiRequest(`/jobs${queryStr}`);
@@ -229,6 +243,9 @@ const API = {
 
     // Applications endpoints
     applications: {
+        async get(id) {
+            return apiRequest(`/applications/${id}`);
+        },
         async submit(data) {
             return apiRequest('/applications', {
                 method: 'POST',
@@ -245,6 +262,37 @@ const API = {
             return apiRequest(`/applications/${id}/status`, {
                 method: 'PATCH',
                 body: { status }
+            });
+        }
+    },
+
+    // Saved Jobs endpoints
+    savedJobs: {
+        async list(email) {
+            return apiRequest(`/saved-jobs/${email}`);
+        },
+        async add(email, jobId) {
+            return apiRequest('/saved-jobs', {
+                method: 'POST',
+                body: { email, jobId }
+            });
+        },
+        async remove(email, jobId) {
+            return apiRequest('/saved-jobs', {
+                method: 'DELETE',
+                body: { email, jobId }
+            });
+        }
+    },
+
+    // User Notifications endpoints
+    notifications: {
+        async list(email) {
+            return apiRequest(`/notifications/${email}`);
+        },
+        async markRead(id) {
+            return apiRequest(`/notifications/${id}/read`, {
+                method: 'PUT'
             });
         }
     }
@@ -380,21 +428,120 @@ const Theme = {
         this._updateIcon(this.get());
     },
 
-    init() {
-        this.applyEarly();
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.injectToggleButton());
+// ============================================================
+// 🔔 NOTIFICATIONS MANAGER — In-App live dropdowns
+// ============================================================
+
+const NotificationsManager = {
+    injectNotifications() {
+        const user = Session.getUser();
+        if (!user || !user.email) return;
+
+        if (document.querySelector('.notification-dropdown-wrapper')) return;
+
+        // Find navbar container
+        const navRight = document.querySelector('.navbar-custom .container > div') || document.querySelector('.navbar-custom .container');
+        if (!navRight) return;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'notification-dropdown-wrapper d-inline-block me-3 position-relative';
+        wrapper.innerHTML = `
+            <button class="btn btn-outline-primary rounded-circle position-relative p-2" id="notifBellBtn" data-bs-toggle="dropdown" aria-expanded="false" style="width:40px; height:40px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+                <i class="bi bi-bell-fill"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notifBadge" style="font-size: 9px; padding: 3px 6px;">0</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow p-2" aria-labelledby="notifBellBtn" id="notifDropdownList" style="width: 320px; max-height: 400px; overflow-y: auto; border-radius: 12px; background: var(--bg-card); border-color: var(--border-color);">
+                <li class="dropdown-header border-bottom pb-2 mb-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold" style="color: var(--text-primary) !important;">Notifications</span>
+                </li>
+                <div id="notifItemsContainer">
+                    <li class="text-center py-3 text-secondary small">No notifications yet</li>
+                </div>
+            </ul>
+        `;
+
+        const themeBtn = document.getElementById('themeToggleBtn') || document.querySelector('.btn-logout');
+        if (themeBtn) {
+            themeBtn.parentNode.insertBefore(wrapper, themeBtn);
         } else {
-            this.injectToggleButton();
+            navRight.appendChild(wrapper);
+        }
+
+        this.loadNotifications();
+        setInterval(() => this.loadNotifications(), 15000);
+    },
+
+    async loadNotifications() {
+        const user = Session.getUser();
+        if (!user || !user.email) return;
+
+        try {
+            const res = await API.notifications.list(user.email);
+            const notifications = res.notifications || [];
+            
+            const badge = document.getElementById('notifBadge');
+            const container = document.getElementById('notifItemsContainer');
+            if (!container) return;
+
+            const unreadCount = notifications.filter(n => !n.isRead).length;
+            if (unreadCount > 0) {
+                badge.innerText = unreadCount;
+                badge.classList.remove('d-none');
+            } else {
+                badge.classList.add('d-none');
+            }
+
+            if (notifications.length === 0) {
+                container.innerHTML = `<li class="text-center py-3 text-secondary small" style="color: var(--text-muted) !important;">No notifications yet</li>`;
+                return;
+            }
+
+            container.innerHTML = notifications.map(n => `
+                <li class="p-2 mb-1 rounded position-relative notif-item ${n.isRead ? 'opacity-75' : 'fw-semibold border-start border-primary border-3'}" 
+                    style="cursor: pointer; transition: background 0.2s; background: ${n.isRead ? 'transparent' : 'rgba(79, 70, 229, 0.05)'}; list-style: none;" 
+                    data-id="${n.id}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="small d-block text-wrap" style="max-width: 250px; font-size: 13px; color: var(--text-primary);">${n.message}</span>
+                        ${!n.isRead ? `<span class="badge bg-primary rounded-circle p-1" style="width:6px; height:6px; margin-top: 4px;"> </span>` : ''}
+                    </div>
+                    <span class="x-small text-muted d-block mt-1" style="font-size: 10px; color: var(--text-muted) !important;">${new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                </li>
+            `).join('');
+
+            container.querySelectorAll('.notif-item').forEach(item => {
+                item.addEventListener('click', async () => {
+                    const notifId = item.dataset.id;
+                    const notifObj = notifications.find(n => n.id === notifId);
+                    if (notifObj && !notifObj.isRead) {
+                        try {
+                            await API.notifications.markRead(notifId);
+                            this.loadNotifications();
+                        } catch (err) {
+                            console.error("Mark read failed:", err);
+                        }
+                    }
+                });
+            });
+
+        } catch (err) {
+            console.error("Failed to load notifications:", err);
         }
     }
 };
 
-// Apply theme before anything renders to avoid flash of wrong theme
 Theme.applyEarly();
 
 // Initialize fully on load
-Theme.init();
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        Theme.injectToggleButton();
+        NotificationsManager.injectNotifications();
+    });
+} else {
+    Theme.injectToggleButton();
+    NotificationsManager.injectNotifications();
+}
 
 // Expose globally
 window.Theme = Theme;
+window.NotificationsManager = NotificationsManager;

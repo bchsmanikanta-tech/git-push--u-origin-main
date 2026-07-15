@@ -50,8 +50,11 @@
                             <th>Candidate Name</th>
                             <th>Email Address</th>
                             <th>Applied Position</th>
+                            <th>City & State</th>
+                            <th>CGPA</th>
                             <th>Cover Letter</th>
                             <th>Submitted Resume</th>
+                            <th>Certification</th>
                             <th>Status</th>
                             <th>Action</th>
                         </tr>
@@ -80,6 +83,7 @@
                 </div>
                 <div class="modal-body p-4">
                     <p class="text-secondary small mb-1">Submitted by: <strong id="letter-candidate" class="text-dark">Candidate</strong></p>
+                    <p class="text-secondary small mb-1" id="candidate-address-wrapper">Address: <strong id="letter-address" class="text-dark">-</strong></p>
                     <hr class="mt-1 mb-3 text-slate-200">
                     <p class="text-slate-800 lh-lg" style="white-space: pre-wrap;" id="letter-content">
                         No letter contents details.
@@ -106,27 +110,28 @@
 
             // Resume store — maps app ID to Base64 data URL
             const resumeStore = {};
+            // Certificate store — maps app ID to Base64 data URL
+            const certStore = {};
 
             // Open resume safely using central helper
             async function openResume(appId) {
                 let dataUrl = resumeStore[appId];
-                if (!dataUrl) {
-                    showToast('No resume file available for this applicant.', 'error');
-                    return;
+                if (!dataUrl || dataUrl === "present") {
+                    showToast('Downloading resume, please wait...', 'info');
+                    try {
+                        const res = await API.applications.get(appId);
+                        if (res && res.application && res.application.resume) {
+                            dataUrl = res.application.resume;
+                            resumeStore[appId] = dataUrl;
+                        }
+                    } catch (err) {
+                        console.error("Failed to load application resume:", err);
+                    }
                 }
 
-                if (!dataUrl.startsWith('data:')) {
-                    const app = companyApps.find(a => a.id === appId);
-                    if (app && app.seekerEmail) {
-                        try {
-                            const profileRes = await API.profile.getSeeker(app.seekerEmail);
-                            if (profileRes && profileRes.profile && profileRes.profile.resume && profileRes.profile.resume.startsWith('data:')) {
-                                dataUrl = profileRes.profile.resume;
-                            }
-                        } catch (err) {
-                            console.error("Failed to fetch seeker profile resume fallback:", err);
-                        }
-                    }
+                if (!dataUrl || dataUrl === "present") {
+                    showToast('No resume file available for this applicant.', 'error');
+                    return;
                 }
 
                 window.viewResume(dataUrl);
@@ -150,6 +155,28 @@
                         return;
                     }
 
+                    // Open certificate safely
+                    async function openCertificate(appId) {
+                        let dataUrl = certStore[appId];
+                        if (!dataUrl || dataUrl === "present") {
+                            showToast('Downloading certificate, please wait...', 'info');
+                            try {
+                                const res = await API.applications.get(appId);
+                                if (res && res.application && res.application.certification) {
+                                    dataUrl = res.application.certification;
+                                    certStore[appId] = dataUrl;
+                                }
+                            } catch (err) {
+                                console.error("Failed to load application certificate:", err);
+                            }
+                        }
+                        if (!dataUrl || dataUrl === "present") {
+                            showToast('No certification file available for this applicant.', 'error');
+                            return;
+                        }
+                        window.viewResume(dataUrl);
+                    }
+
                     // Build rows via DOM (avoids innerHTML+= re-parse issues)
                     [...companyApps].reverse().forEach(app => {
                         let statusBadgeClass = 'badge-pending';
@@ -157,6 +184,7 @@
                         if (app.status === 'Rejected') statusBadgeClass = 'badge-rejected';
 
                         if (app.resume) resumeStore[app.id] = app.resume;
+                        if (app.certification) certStore[app.id] = app.certification;
 
                         const letterBtnHtml = app.coverLetter
                             ? `<button class="btn btn-sm btn-outline-secondary rounded-pill px-3 open-letter-btn" data-app-id="${app.id}"><i class="bi bi-chat-text"></i> Read Letter</button>`
@@ -179,10 +207,14 @@
                             <td class="fw-bold text-slate-800">${app.seekerName}</td>
                             <td class="small text-secondary">${app.seekerEmail}</td>
                             <td class="fw-semibold">${app.jobTitle}</td>
+                            <td class="fw-bold">${app.cgpa || '-'}</td>
                             <td>${letterBtnHtml}</td>
                             <td>${app.resume
-                                ? `<button class="btn btn-sm btn-outline-info rounded-pill px-3 view-resume-btn" data-app-id="${app.id}"><i class="bi bi-file-pdf"></i> View File</button>`
+                                ? `<button class="btn btn-sm btn-outline-info rounded-pill px-3 view-resume-btn" data-app-id="${app.id}"><i class="bi bi-file-pdf"></i> View Resume</button>`
                                 : '<span class="text-secondary small">No resume</span>'}</td>
+                            <td>${app.certification
+                                ? `<button class="btn btn-sm btn-outline-warning rounded-pill px-3 view-cert-btn" data-app-id="${app.id}"><i class="bi bi-patch-check"></i> View Cert</button>`
+                                : '<span class="text-secondary small">No cert</span>'}</td>
                             <td><span class="badge-custom ${statusBadgeClass}" id="badge-${app.id}"><i class="bi bi-circle-fill" style="font-size:8px;"></i> ${app.status}</span></td>
                             <td id="actions-${app.id}">${actionControls}</td>
                         `;
@@ -192,6 +224,9 @@
                     // Attach event listeners AFTER rows are in the DOM
                     tbody.querySelectorAll('.view-resume-btn').forEach(btn => {
                         btn.addEventListener('click', () => openResume(btn.dataset.appId));
+                    });
+                    tbody.querySelectorAll('.view-cert-btn').forEach(btn => {
+                        btn.addEventListener('click', () => openCertificate(btn.dataset.appId));
                     });
                     tbody.querySelectorAll('.open-letter-btn').forEach(btn => {
                         btn.addEventListener('click', () => openLetterModal(btn.dataset.appId));
@@ -216,6 +251,16 @@
                 if (!app) return;
 
                 document.getElementById('letter-candidate').innerText = `${app.seekerName} (${app.seekerEmail})`;
+                
+                let fullAddress = '-';
+                if (app.address) {
+                    fullAddress = app.address;
+                    if (app.city) fullAddress += `, ${app.city}`;
+                    if (app.state) fullAddress += `, ${app.state}`;
+                } else if (app.city || app.state) {
+                    fullAddress = [app.city, app.state].filter(Boolean).join(', ');
+                }
+                document.getElementById('letter-address').innerText = fullAddress;
                 document.getElementById('letter-content').innerText = app.coverLetter;
 
                 const letterModal = new bootstrap.Modal(document.getElementById('letterModal'));

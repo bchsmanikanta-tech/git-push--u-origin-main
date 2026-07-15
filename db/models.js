@@ -11,6 +11,7 @@ const JobseekerSchema = new Schema({
   photo: { type: String, default: '' },
   cover_letter: { type: String, default: '' },
   status: { type: String, default: 'active' },
+  saved_jobs: { type: [String], default: [] },
   created_at: { type: Date, default: Date.now }
 }, { collection: 'jobseekers' });
 
@@ -55,7 +56,12 @@ const ApplicationSchema = new Schema({
   applied_date: { type: String, default: '' },
   resume: { type: String, default: '' },
   cover_letter: { type: String, default: '' },
-  status: { type: String, default: 'Pending' }
+  status: { type: String, default: 'Pending' },
+  cgpa: { type: String, default: '' },
+  certification: { type: String, default: '' },
+  address: { type: String, default: '' },
+  city: { type: String, default: '' },
+  state: { type: String, default: '' }
 }, { collection: 'applications' });
 
 const AdminSchema = new Schema({
@@ -106,6 +112,15 @@ const NotificationSchema = new Schema({
   created_at: { type: Date, default: Date.now }
 }, { collection: 'notifications' });
 
+const UserNotificationSchema = new Schema({
+  _id: { type: String, required: true },
+  recipient_email: { type: String, required: true },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  is_read: { type: Boolean, default: false },
+  created_at: { type: Date, default: Date.now }
+}, { collection: 'user_notifications' });
+
 module.exports = {
   Jobseeker: mongoose.model('Jobseeker', JobseekerSchema),
   Company: mongoose.model('Company', CompanySchema),
@@ -115,5 +130,6 @@ module.exports = {
   SmartDoor: mongoose.model('SmartDoor', SmartDoorSchema),
   AuditLog: mongoose.model('AuditLog', AuditLogSchema),
   Report: mongoose.model('Report', ReportSchema),
-  Notification: mongoose.model('Notification', NotificationSchema)
+  Notification: mongoose.model('Notification', NotificationSchema),
+  UserNotification: mongoose.model('UserNotification', UserNotificationSchema)
 };

@@ -298,12 +298,51 @@ app.post('/api/profile/upload-resume', (req, res, next) => {
     }
 });
 
+// Upload Certificate API
+app.post('/api/profile/upload-certificate', (req, res, next) => {
+    upload.single('certificate')(req, res, (err) => {
+        if (err) {
+            if (err instanceof multer.MulterError) {
+                if (err.code === 'LIMIT_FILE_SIZE') {
+                    return res.status(400).json({ success: false, message: "File size limit exceeded. Max limit is 10MB." });
+                }
+                return res.status(400).json({ success: false, message: err.message });
+            }
+            return res.status(500).json({ success: false, message: err.message || "An error occurred during upload." });
+        }
+        next();
+    });
+}, async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ success: false, message: "No file uploaded." });
+    }
+
+    try {
+        const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+        if (!allowedMimeTypes.includes(req.file.mimetype)) {
+            return res.status(400).json({ success: false, message: "Invalid file format. Allowed formats: PDF, JPG, PNG, JPEG." });
+        }
+
+        const base64Data = req.file.buffer.toString('base64');
+        const certDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+
+        res.json({
+            success: true,
+            message: "Certificate uploaded successfully!",
+            filename: req.file.originalname,
+            url: certDataUrl
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+});
 
 // --- Jobs APIs ---
 
-// Get All Active Jobs (Supports filtering)
+// Get All Active Jobs (Supports filtering and pagination)
 app.get('/api/jobs', async (req, res) => {
-    const { title, location } = req.query;
+    const { title, location, type, experience, minSalary, page, limit } = req.query;
     try {
         let filteredJobs = (await db.listJobs()).filter(job => job.status === "Active");
 
@@ -323,7 +362,52 @@ app.get('/api/jobs', async (req, res) => {
             );
         }
 
-        res.json({ success: true, jobs: filteredJobs });
+        if (type && type !== 'All') {
+            const typeQuery = type.toLowerCase();
+            filteredJobs = filteredJobs.filter(job =>
+                job.type.toLowerCase() === typeQuery
+            );
+        }
+
+        if (experience && experience !== 'All') {
+            const expQuery = experience.toLowerCase();
+            filteredJobs = filteredJobs.filter(job =>
+                job.experience.toLowerCase().includes(expQuery)
+            );
+        }
+
+        if (minSalary) {
+            const minSalVal = parseInt(minSalary, 10) || 0;
+            if (minSalVal > 0) {
+                filteredJobs = filteredJobs.filter(job => {
+                    const cleanSalaryStr = (job.salary || '').replace(/[^0-9]/g, '');
+                    const jobSal = cleanSalaryStr ? parseInt(cleanSalaryStr, 10) : 0;
+                    return jobSal === 0 || jobSal >= minSalVal;
+                });
+            }
+        }
+
+        // Pagination
+        const total = filteredJobs.length;
+        let paginatedJobs = filteredJobs;
+        let pageVal = 1;
+        let totalPages = 1;
+
+        if (page) {
+            pageVal = parseInt(page, 10) || 1;
+            const limitVal = parseInt(limit, 10) || 6;
+            totalPages = Math.ceil(total / limitVal);
+            const startIndex = (pageVal - 1) * limitVal;
+            paginatedJobs = filteredJobs.slice(startIndex, startIndex + limitVal);
+        }
+
+        res.json({
+            success: true,
+            jobs: paginatedJobs,
+            total,
+            page: pageVal,
+            totalPages
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: "Server error." });
     }
@@ -364,6 +448,27 @@ app.post('/api/jobs', async (req, res) => {
             status: "Active",
             createdAt: new Date().toISOString()
         });
+
+        // Trigger recommendation notifications for matching seekers
+        try {
+            const seekers = await db.listJobseekers();
+            const jobSkills = (skills || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+            
+            for (const seeker of seekers) {
+                const seekerSkillsList = (seeker.skills || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+                const hasMatch = jobSkills.some(skill => seekerSkillsList.includes(skill));
+                if (hasMatch) {
+                    await db.createNotification({
+                        recipientEmail: seeker.email,
+                        title: "New Job Match Recommendation",
+                        message: `${companyName} just posted a new vacancy: ${title} which matches your profile skills!`
+                    });
+                    console.log(`[EMAIL SIMULATION] To Seeker (${seeker.email}): Skill matching recommendation alert for new opening: ${title} at ${companyName}.`);
+                }
+            }
+        } catch (notiError) {
+            console.error("Failed to trigger job posting notifications:", notiError);
+        }
 
         res.status(201).json({ success: true, message: "Job posted successfully!", job: newJob });
     } catch (error) {
@@ -408,7 +513,7 @@ app.delete('/api/jobs/:id', async (req, res) => {
 
 // Submit Job Application (Job Seeker only)
 app.post('/api/applications', async (req, res) => {
-    const { jobId, jobTitle, companyEmail, companyName, seekerEmail, seekerName, coverLetter, resume } = req.body;
+    const { jobId, jobTitle, companyEmail, companyName, seekerEmail, seekerName, coverLetter, resume, cgpa, certification, address, city, state } = req.body;
 
     if (!jobId || !jobTitle || !companyEmail || !seekerEmail || !seekerName) {
         return res.status(400).json({ success: false, message: "Invalid application details." });
@@ -440,8 +545,31 @@ app.post('/api/applications', async (req, res) => {
             appliedDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
             resume: finalResume || "",
             coverLetter: coverLetter || "",
-            status: "Pending"
+            status: "Pending",
+            cgpa: cgpa || "",
+            certification: certification || "",
+            address: address || "",
+            city: city || "",
+            state: state || ""
         });
+
+        // Trigger notifications
+        try {
+            await db.createNotification({
+                recipientEmail: seekerEmail,
+                title: "Application Submitted",
+                message: `Your application for ${jobTitle} at ${companyName || 'the employer'} has been submitted.`
+            });
+            await db.createNotification({
+                recipientEmail: companyEmail,
+                title: "New Application Received",
+                message: `${seekerName} applied for your opening: ${jobTitle}.`
+            });
+            console.log(`[EMAIL SIMULATION] To Seeker (${seekerEmail}): Application submitted successfully for ${jobTitle}.`);
+            console.log(`[EMAIL SIMULATION] To Employer (${companyEmail}): New application received from ${seekerName} for ${jobTitle}.`);
+        } catch (notiError) {
+            console.error("Failed to trigger application notifications:", notiError);
+        }
 
         res.status(201).json({ success: true, message: "Application submitted successfully!", application: newApp });
     } catch (error) {
@@ -471,6 +599,19 @@ app.get('/api/applications/company/:email', async (req, res) => {
     }
 });
 
+// Get Application Details (Including heavy base64 resume/cover letter)
+app.get('/api/applications/:id', async (req, res) => {
+    try {
+        const appRow = await db.getApplicationById(req.params.id);
+        if (!appRow) {
+            return res.status(404).json({ success: false, message: "Application not found." });
+        }
+        res.json({ success: true, application: appRow });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+});
+
 // Update Application Status (Accept / Reject)
 app.patch('/api/applications/:id/status', async (req, res) => {
     const { status } = req.body;
@@ -482,6 +623,18 @@ app.patch('/api/applications/:id/status', async (req, res) => {
         const updated = await db.setApplicationStatus(req.params.id, status);
         if (!updated) {
             return res.status(404).json({ success: false, message: "Application not found." });
+        }
+
+        // Trigger notifications
+        try {
+            await db.createNotification({
+                recipientEmail: updated.seekerEmail,
+                title: `Application ${status === 'Selected' ? 'Accepted' : 'Evaluated'}`,
+                message: `Your application for ${updated.jobTitle} at ${updated.companyName || 'the employer'} has been marked as ${status}.`
+            });
+            console.log(`[EMAIL SIMULATION] To Seeker (${updated.seekerEmail}): Your application for ${updated.jobTitle} has been marked as ${status}.`);
+        } catch (notiError) {
+            console.error("Failed to trigger status update notification:", notiError);
         }
 
         res.json({ success: true, message: `Application state updated to ${status}.`, application: updated });
@@ -867,6 +1020,68 @@ app.post('/api/admin/users/bulk-email', adminAuth, async (req, res) => {
             success: true,
             message: `Email "${subject}" sent to ${recipients.length} ${segment || 'all'} user(s) successfully!`
         });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+});
+
+// --- User Notifications APIs ---
+
+// Fetch user notifications
+app.get('/api/notifications/:email', async (req, res) => {
+    try {
+        const list = await db.listNotificationsByEmail(req.params.email);
+        res.json({ success: true, notifications: list });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+});
+
+// Mark notification as read
+app.put('/api/notifications/:id/read', async (req, res) => {
+    try {
+        const updated = await db.markNotificationAsRead(req.params.id);
+        res.json({ success: true, notification: updated });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+});
+
+// --- Saved Jobs APIs ---
+
+// Fetch saved jobs
+app.get('/api/saved-jobs/:email', async (req, res) => {
+    try {
+        const list = await db.listSavedJobs(req.params.email);
+        res.json({ success: true, jobs: list });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+});
+
+// Save a job
+app.post('/api/saved-jobs', async (req, res) => {
+    const { email, jobId } = req.body;
+    if (!email || !jobId) {
+        return res.status(400).json({ success: false, message: "Email and Job ID are required." });
+    }
+    try {
+        const updatedSeeker = await db.addSavedJob(email, jobId);
+        res.json({ success: true, message: "Job bookmarked successfully!", user: updatedSeeker });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+});
+
+// Remove a saved job
+app.delete('/api/saved-jobs', async (req, res) => {
+    const { email, jobId } = req.body;
+    if (!email || !jobId) {
+        return res.status(400).json({ success: false, message: "Email and Job ID are required." });
+    }
+    try {
+        const updatedSeeker = await db.removeSavedJob(email, jobId);
+        res.json({ success: true, message: "Bookmark removed successfully!", user: updatedSeeker });
     } catch (error) {
         res.status(500).json({ success: false, message: "Server error." });
     }

@@ -1,4 +1,4 @@
-const { Jobseeker, Company, Job, Application, Admin } = require('./models');
+const { Jobseeker, Company, Job, Application, Admin, UserNotification } = require('./models');
 
 // ---------- Row mappers (to keep controller responses identical) ----------
 const mapJobseeker = (r) => ({
@@ -12,6 +12,7 @@ const mapJobseeker = (r) => ({
   photo: r.photo || '',
   coverLetter: r.cover_letter,
   status: r.status,
+  savedJobs: r.saved_jobs || [],
   createdAt: r.created_at
 });
 
@@ -55,7 +56,12 @@ const mapApplication = (r) => ({
   appliedDate: r.applied_date,
   resume: r.resume,
   coverLetter: r.cover_letter,
-  status: r.status
+  status: r.status,
+  cgpa: r.cgpa || '',
+  certification: r.certification || '',
+  address: r.address || '',
+  city: r.city || '',
+  state: r.state || ''
 });
 
 const mapAdmin = (r) => ({
@@ -71,7 +77,7 @@ const mapAdmin = (r) => ({
 
 // ---------- Job Seekers ----------
 const listJobseekers = async () => {
-  const rows = await Jobseeker.find().sort({ _id: 1 });
+  const rows = await Jobseeker.find({}, { resume: 0, photo: 0, cover_letter: 0 }).sort({ _id: 1 });
   return rows.map(mapJobseeker);
 };
 
@@ -232,12 +238,30 @@ const listApplications = async () => {
 };
 
 const getApplicationsBySeeker = async (email) => {
-  const rows = await Application.find({ seeker_email: email.toLowerCase() });
+  const rows = await Application.find(
+    { seeker_email: email.toLowerCase() },
+    {
+      resume: { $cond: [ { $gt: [ { $strLenCP: { $ifNull: [ "$resume", "" ] } }, 0 ] }, "present", "" ] },
+      certification: { $cond: [ { $gt: [ { $strLenCP: { $ifNull: [ "$certification", "" ] } }, 0 ] }, "present", "" ] },
+      _id: 1, job_id: 1, job_title: 1, company_email: 1, company_name: 1,
+      seeker_email: 1, seeker_name: 1, applied_date: 1, status: 1,
+      cgpa: 1, address: 1, city: 1, state: 1, cover_letter: 1
+    }
+  );
   return rows.map(mapApplication);
 };
 
 const getApplicationsByCompany = async (email) => {
-  const rows = await Application.find({ company_email: email.toLowerCase() });
+  const rows = await Application.find(
+    { company_email: email.toLowerCase() },
+    {
+      resume: { $cond: [ { $gt: [ { $strLenCP: { $ifNull: [ "$resume", "" ] } }, 0 ] }, "present", "" ] },
+      certification: { $cond: [ { $gt: [ { $strLenCP: { $ifNull: [ "$certification", "" ] } }, 0 ] }, "present", "" ] },
+      _id: 1, job_id: 1, job_title: 1, company_email: 1, company_name: 1,
+      seeker_email: 1, seeker_name: 1, applied_date: 1, status: 1,
+      cgpa: 1, address: 1, city: 1, state: 1, cover_letter: 1
+    }
+  );
   return rows.map(mapApplication);
 };
 
@@ -263,7 +287,12 @@ const createApplication = async (data) => {
     applied_date: data.appliedDate || '',
     resume: data.resume || '',
     cover_letter: data.coverLetter || '',
-    status: data.status || 'Pending'
+    status: data.status || 'Pending',
+    cgpa: data.cgpa || '',
+    certification: data.certification || '',
+    address: data.address || '',
+    city: data.city || '',
+    state: data.state || ''
   });
   return mapApplication(row);
 };
@@ -304,6 +333,75 @@ const ensureDefaultAdmins = async () => {
   }
 };
 
+const mapUserNotification = (r) => ({
+  id: r._id.toString(),
+  recipientEmail: r.recipient_email,
+  title: r.title,
+  message: r.message,
+  isRead: r.is_read,
+  createdAt: r.created_at
+});
+
+const createNotification = async (data) => {
+  const row = await UserNotification.create({
+    _id: 'noti_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    recipient_email: data.recipientEmail.toLowerCase(),
+    title: data.title,
+    message: data.message,
+    is_read: false
+  });
+  return mapUserNotification(row);
+};
+
+const listNotificationsByEmail = async (email) => {
+  const rows = await UserNotification.find({ recipient_email: email.toLowerCase() }).sort({ created_at: -1 });
+  return rows.map(mapUserNotification);
+};
+
+const markNotificationAsRead = async (id) => {
+  const row = await UserNotification.findByIdAndUpdate(id, { is_read: true }, { returnDocument: 'after' });
+  return row ? mapUserNotification(row) : null;
+};
+
+const addSavedJob = async (email, jobId) => {
+  const seeker = await Jobseeker.findOneAndUpdate(
+    { email: email.toLowerCase() },
+    { $addToSet: { saved_jobs: jobId } },
+    { returnDocument: 'after' }
+  );
+  return seeker ? mapJobseeker(seeker) : null;
+};
+
+const removeSavedJob = async (email, jobId) => {
+  const seeker = await Jobseeker.findOneAndUpdate(
+    { email: email.toLowerCase() },
+    { $pull: { saved_jobs: jobId } },
+    { returnDocument: 'after' }
+  );
+  return seeker ? mapJobseeker(seeker) : null;
+};
+
+const listSavedJobs = async (email) => {
+  const seeker = await Jobseeker.findOne({ email: email.toLowerCase() });
+  if (!seeker || !seeker.saved_jobs || seeker.saved_jobs.length === 0) return [];
+  const rows = await Job.find({ _id: { $in: seeker.saved_jobs } });
+  return rows.map(r => ({
+    id: r._id.toString(),
+    title: r.title,
+    companyEmail: r.company_email,
+    companyName: r.company_name,
+    location: r.location,
+    salary: r.salary,
+    type: r.type,
+    skills: r.skills,
+    description: r.description,
+    experience: r.experience,
+    status: r.status,
+    featured: r.featured,
+    createdAt: r.created_at
+  }));
+};
+
 module.exports = {
   // jobseekers
   listJobseekers,
@@ -336,5 +434,13 @@ module.exports = {
   // admins
   listAdmins,
   getAdminByEmail,
-  ensureDefaultAdmins
+  ensureDefaultAdmins,
+  // saved jobs
+  addSavedJob,
+  removeSavedJob,
+  listSavedJobs,
+  // user notifications
+  createNotification,
+  listNotificationsByEmail,
+  markNotificationAsRead
 };

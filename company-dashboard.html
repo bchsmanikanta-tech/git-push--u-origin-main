@@ -13,6 +13,7 @@
     <!-- Custom Style System -->
     <link rel="stylesheet" href="style.css">
     
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/api.js" defer></script>
 </head>
 <body>
@@ -66,6 +67,26 @@
                     <i class="bi bi-person-check-fill fs-1 mb-2 d-block"></i>
                     <h5 class="fw-medium">Selected Candidates</h5>
                     <h2 class="fw-bold mb-0" id="stat-selected-count">0</h2>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Charts Row -->
+        <div class="row g-4 mt-4">
+            <div class="col-md-6">
+                <div class="premium-card p-4 h-100">
+                    <h5 class="fw-bold mb-3 small text-uppercase text-secondary tracking-wider"><i class="bi bi-bar-chart-line-fill text-primary me-2"></i>Applicants per Job Position</h5>
+                    <div style="height: 240px; width: 100%;">
+                        <canvas id="jobApplicantsChart" style="max-height: 240px;"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="premium-card p-4 h-100">
+                    <h5 class="fw-bold mb-3 small text-uppercase text-secondary tracking-wider"><i class="bi bi-funnel-fill text-primary me-2"></i>Hiring Funnel (Application Outcomes)</h5>
+                    <div class="d-flex justify-content-center align-items-center" style="height: 240px; position: relative;">
+                        <canvas id="hiringOutcomeChart" style="max-width: 240px; max-height: 240px;"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -131,6 +152,9 @@
             // Set greeting name
             document.getElementById('company-name-greeting').innerText = user.name;
 
+            let applicantsChart = null;
+            let outcomesChart = null;
+
             try {
                 // Fetch active job list
                 const jobsData = await API.jobs.getAll();
@@ -138,13 +162,15 @@
                 
                 // Fetch applications details
                 const appsData = await API.applications.getForCompany(user.email);
-                const apps = appsData.applications;
+                const apps = appsData.applications || [];
 
                 // Update Stats
                 document.getElementById('stat-posted-jobs').innerText = myJobs.length;
                 document.getElementById('stat-applicants-count').innerText = apps.length;
                 
                 const selectedCount = apps.filter(a => a.status === 'Selected').length;
+                const rejectedCount = apps.filter(a => a.status === 'Rejected').length;
+                const pendingCount = apps.filter(a => a.status === 'Pending').length;
                 document.getElementById('stat-selected-count').innerText = selectedCount;
 
                 // Render Company Jobs table
@@ -160,29 +186,94 @@
                             </td>
                         </tr>
                     `;
-                    return;
+                } else {
+                    // Show up to 5 recent job posts (reverse chronological)
+                    const recentJobs = [...myJobs].reverse().slice(0, 5);
+
+                    recentJobs.forEach(job => {
+                        let badgeClass = 'badge-selected'; // Active is emerald
+                        if (job.status === 'Closed') badgeClass = 'badge-rejected'; // Closed is red
+
+                        tbody.innerHTML += `
+                            <tr>
+                                <td class="fw-semibold" style="color: var(--text-primary);">${job.title}</td>
+                                <td style="color: var(--text-primary);">${job.location}</td>
+                                <td style="color: var(--text-primary);">${job.type}</td>
+                                <td class="fw-medium text-slate-800" style="color: var(--text-primary);">${job.salary}</td>
+                                <td>
+                                    <span class="badge-custom ${badgeClass}">
+                                        <i class="bi bi-circle-fill" style="font-size: 8px;"></i> ${job.status}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    });
                 }
 
-                // Show up to 5 recent job posts (reverse chronological)
-                const recentJobs = [...myJobs].reverse().slice(0, 5);
+                // Render Applicants per Job Chart (Bar Chart)
+                const jobLabels = myJobs.map(j => j.title);
+                const jobData = myJobs.map(j => apps.filter(a => a.jobId === j.id).length);
 
-                recentJobs.forEach(job => {
-                    let badgeClass = 'badge-selected'; // Active is emerald
-                    if (job.status === 'Closed') badgeClass = 'badge-rejected'; // Closed is red
+                const ctxBar = document.getElementById('jobApplicantsChart').getContext('2d');
+                applicantsChart = new Chart(ctxBar, {
+                    type: 'bar',
+                    data: {
+                        labels: jobLabels.length ? jobLabels : ['No Postings'],
+                        datasets: [{
+                            label: 'Applications',
+                            data: jobData.length ? jobData : [0],
+                            backgroundColor: 'rgba(79, 70, 229, 0.75)',
+                            borderRadius: 6,
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { stepSize: 1, color: 'var(--text-primary)' },
+                                grid: { color: 'rgba(0,0,0,0.05)' }
+                            },
+                            x: {
+                                ticks: { color: 'var(--text-primary)' },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
 
-                    tbody.innerHTML += `
-                        <tr>
-                            <td class="fw-semibold text-slate-800">${job.title}</td>
-                            <td>${job.location}</td>
-                            <td>${job.type}</td>
-                            <td class="fw-medium">${job.salary}</td>
-                            <td>
-                                <span class="badge-custom ${badgeClass}">
-                                    <i class="bi bi-circle-fill" style="font-size: 8px;"></i> ${job.status}
-                                </span>
-                            </td>
-                        </tr>
-                    `;
+                // Render Hiring Outcomes Chart (Doughnut Chart)
+                const ctxDoughnut = document.getElementById('hiringOutcomeChart').getContext('2d');
+                outcomesChart = new Chart(ctxDoughnut, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Selected', 'Pending', 'Rejected'],
+                        datasets: [{
+                            data: [selectedCount, pendingCount, rejectedCount],
+                            backgroundColor: ['#10b981', '#3b82f6', '#ef4444'],
+                            borderWidth: 2,
+                            borderColor: 'var(--bg-card)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: 'var(--text-primary)',
+                                    font: { size: 12 }
+                                }
+                            }
+                        },
+                        cutout: '70%'
+                    }
                 });
 
             } catch (err) {

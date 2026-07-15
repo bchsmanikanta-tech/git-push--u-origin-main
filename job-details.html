@@ -11,6 +11,31 @@
     
     <!-- Custom Style System -->
     <link rel="stylesheet" href="style.css">
+    <style>
+        .hover-scale {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+        }
+        .hover-scale:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .anim-slide-in {
+            animation: slideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        /* SVG Circular Progress Ring */
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring__circle {
+            stroke-dasharray: 314.16 314.16;
+            stroke-dashoffset: 314.16;
+            transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
     
     <script src="js/api.js" defer></script>
 </head>
@@ -120,6 +145,14 @@
                             <!-- Badges injected -->
                         </div>
                     </div>
+
+                    <!-- Job Match Probability Box -->
+                    <div class="p-4 bg-light rounded-4 border border-slate-200 mt-4 d-none" id="match-probability-container">
+                        <h5 class="fw-bold mb-3"><i class="bi bi-bar-chart-line-fill text-primary me-2"></i>Match & Gap Analysis</h5>
+                        <div id="match-probability-content">
+                            <!-- Content injected -->
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -143,16 +176,20 @@
             }
 
             try {
-                // Fetch job details
+                // Fetch job details first to get company email
                 const jobData = await API.jobs.get(jobId);
                 const job = jobData.job;
 
-                // Fetch seeker profile (for company about fallback if empty, but server handles it)
-                const compProfileData = await API.profile.getCompany(job.companyEmail).catch(() => null);
+                // Fetch seeker profile, company profile, and applications in parallel
+                const [seekerData, compProfileData, appsData] = await Promise.all([
+                    API.profile.getSeeker(user.email).catch(() => null),
+                    API.profile.getCompany(job.companyEmail).catch(() => null),
+                    API.applications.getForSeeker(user.email).catch(() => ({ applications: [] }))
+                ]);
 
-                // Check if already applied
-                const appsData = await API.applications.getForSeeker(user.email);
-                const alreadyApplied = appsData.applications.some(app => app.jobId === jobId);
+                const alreadyApplied = appsData && appsData.applications 
+                    ? appsData.applications.some(app => app.jobId === jobId)
+                    : false;
 
                 // Populate fields
                 document.getElementById('job-title').innerText = job.title;
@@ -169,19 +206,281 @@
                     ? compProfileData.profile.about 
                     : `${job.companyName} is an industry leader dedicated to building outstanding client solutions and fostering great career growth.`;
 
-                // Render skills badges
+                // Extract seeker skills
+                const seekerSkills = (seekerData && seekerData.profile && seekerData.profile.skills)
+                    ? seekerData.profile.skills.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+                    : [];
+
+                // Render skills badges and calculate match probability
                 const skillsContainer = document.getElementById('job-skills-container');
                 skillsContainer.innerHTML = '';
                 
-                const skillsArray = job.skills.split(',').map(s => s.trim()).filter(Boolean);
+                const skillsArray = job.skills ? job.skills.split(',').map(s => s.trim()).filter(Boolean) : [];
+                let matchedCount = 0;
+
                 if (skillsArray.length === 0) {
                     skillsContainer.innerHTML = '<span class="text-secondary small">No specific skills listed</span>';
                 } else {
                     skillsArray.forEach(skill => {
+                        const isMatched = seekerSkills.includes(skill.toLowerCase());
+                        if (isMatched) matchedCount++;
+
+                        const badgeClass = isMatched 
+                            ? 'bg-success text-white' 
+                            : 'bg-secondary text-white opacity-75';
+                        const icon = isMatched 
+                            ? '<i class="bi bi-check-circle-fill me-1"></i>' 
+                            : '<i class="bi bi-dash-circle me-1"></i>';
+
                         skillsContainer.innerHTML += `
-                            <span class="badge bg-primary px-3 py-2 fs-6 rounded-pill">${skill}</span>
+                            <span class="badge ${badgeClass} px-3 py-2 fs-6 rounded-pill d-inline-flex align-items-center">
+                                ${icon}${skill}
+                            </span>
                         `;
                     });
+                }
+
+                // Render Job Match Probability
+                const matchProbContainer = document.getElementById('match-probability-container');
+                const matchProbContent = document.getElementById('match-probability-content');
+
+                // Skill recommendations map
+                const RECOMMENDATIONS_MAP = {
+                    'html': ['Tailwind CSS', 'Bootstrap', 'Sass'],
+                    'css': ['Tailwind CSS', 'Bootstrap', 'Sass'],
+                    'javascript': ['TypeScript', 'React', 'Vue.js', 'Next.js'],
+                    'js': ['TypeScript', 'React', 'Vue.js', 'Next.js'],
+                    'react': ['Redux Toolkit', 'Next.js', 'React Native'],
+                    'java': ['Spring Boot', 'Hibernate', 'RESTful APIs', 'Microservices'],
+                    'spring boot': ['Docker', 'Kubernetes', 'PostgreSQL', 'AWS'],
+                    'python': ['Django', 'FastAPI', 'Pandas', 'NumPy', 'Machine Learning'],
+                    'sql': ['PostgreSQL', 'MongoDB', 'Redis', 'Database Design'],
+                    'mysql': ['PostgreSQL', 'MongoDB', 'Redis', 'Database Design'],
+                    'figma': ['Adobe XD', 'Prototyping', 'Design Systems', 'UI/UX Principles']
+                };
+
+                // Gather recommendations based on required skills
+                const recommendations = new Set();
+                skillsArray.forEach(skill => {
+                    const term = skill.toLowerCase().trim();
+                    if (RECOMMENDATIONS_MAP[term]) {
+                        RECOMMENDATIONS_MAP[term].forEach(rec => {
+                            if (!seekerSkills.includes(rec.toLowerCase())) {
+                                recommendations.add(rec);
+                            }
+                        });
+                    }
+                });
+
+                // Fallback recommendations if required skills list is empty or completely matches
+                if (recommendations.size === 0) {
+                    const titleLower = jobDetails.title.toLowerCase();
+                    if (titleLower.includes('frontend') || titleLower.includes('web')) {
+                        ['TypeScript', 'React', 'Tailwind CSS'].forEach(rec => {
+                            if (!seekerSkills.includes(rec.toLowerCase())) recommendations.add(rec);
+                        });
+                    } else if (titleLower.includes('backend') || titleLower.includes('java') || titleLower.includes('developer')) {
+                        ['Spring Boot', 'SQL', 'Docker'].forEach(rec => {
+                            if (!seekerSkills.includes(rec.toLowerCase())) recommendations.add(rec);
+                        });
+                    }
+                }
+
+                let recommendationsHtml = '';
+                if (recommendations.size > 0) {
+                    recommendationsHtml = `
+                        <div class="mt-4 pt-3 border-top border-slate-200 anim-slide-in">
+                            <h6 class="fw-bold mb-2 text-dark"><i class="bi bi-stars text-primary me-2"></i>Recommended Skills</h6>
+                            <p class="text-muted x-small mb-2">Acquiring these related skills will make you a much stronger candidate:</p>
+                            <div class="d-flex flex-wrap gap-2 mt-1">
+                                ${Array.from(recommendations).map(rec => `
+                                    <span class="badge bg-white text-primary border border-primary px-2.5 py-1.5 rounded-pill small hover-scale">
+                                        ${rec}
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (skillsArray.length > 0) {
+                    const matchPercentage = Math.round((matchedCount / skillsArray.length) * 100);
+                    
+                    let progressBg = 'bg-danger';
+                    let motivationMsg = 'Consider adding these missing skills to your profile to stand out!';
+                    let textClass = 'text-danger';
+                    if (matchPercentage >= 75) {
+                        progressBg = 'bg-success';
+                        motivationMsg = 'Excellent! You are a great fit for this job vacancy.';
+                        textClass = 'text-success';
+                    } else if (matchPercentage >= 40) {
+                        progressBg = 'bg-warning text-dark';
+                        motivationMsg = 'You meet some requirements. Adding more skills could increase your chances!';
+                        textClass = 'text-warning';
+                    }
+
+                    // Calculate missing skills
+                    const missingSkills = skillsArray.filter(skill => !seekerSkills.includes(skill.toLowerCase()));
+                    let missingSkillsHtml = '';
+                    if (missingSkills.length > 0) {
+                        missingSkillsHtml = `
+                            <div class="p-3 bg-warning-subtle border border-warning rounded-4 anim-slide-in">
+                                <h6 class="fw-bold mb-2 text-warning-emphasis" style="font-size: 14px;">
+                                    <i class="bi bi-exclamation-triangle-fill me-1.5"></i>Missing Skills (Gap):
+                                </h6>
+                                <div class="d-flex flex-wrap gap-2 mt-2">
+                                    ${missingSkills.map(skill => `
+                                        <span class="badge bg-white text-warning border border-warning px-2.5 py-1.5 rounded-pill small hover-scale">
+                                            ${skill}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        missingSkillsHtml = `
+                            <div class="p-3 bg-success-subtle border border-success rounded-4 anim-slide-in text-center">
+                                <span class="badge bg-white text-success border border-success px-3 py-2 rounded-pill small hover-scale">
+                                    <i class="bi bi-trophy-fill text-success me-1.5"></i>You have all required skills!
+                                </span>
+                            </div>
+                        `;
+                    }
+
+                    let strokeColor = '#ef4444'; // red
+                    if (matchPercentage >= 75) {
+                        strokeColor = '#10b981'; // green
+                    } else if (matchPercentage >= 40) {
+                        strokeColor = '#f59e0b'; // warning orange
+                    }
+
+                    matchProbContent.innerHTML = `
+                        <div class="text-center my-4">
+                            <div class="position-relative d-inline-flex align-items-center justify-content-center">
+                                <svg class="progress-ring" width="120" height="120">
+                                    <circle class="progress-ring__background" stroke="var(--border-main)" stroke-width="8" fill="transparent" r="50" cx="60" cy="60"/>
+                                    <circle class="progress-ring__circle" stroke="${strokeColor}" stroke-width="8" fill="transparent" r="50" cx="60" cy="60"
+                                            style="stroke-linecap: round; transform-origin: 50% 50%;"/>
+                                </svg>
+                                <div class="position-absolute fs-3 fw-bold ${textClass}" id="match-percent-text">0%</div>
+                            </div>
+                        </div>
+                        <p class="text-muted text-center x-small mb-3">
+                            <i class="bi bi-info-circle me-1"></i>${motivationMsg}
+                        </p>
+
+                        <!-- Skill Gap Analysis -->
+                        <div class="mt-4 pt-3 border-top border-slate-200 anim-slide-in">
+                            <h6 class="fw-bold mb-3 text-dark"><i class="bi bi-diagram-3 text-primary me-2"></i>Skill Gap Analysis</h6>
+                            <div class="p-3 bg-white border border-slate-200 rounded-4 mb-3 shadow-sm">
+                                <div class="d-flex justify-content-between align-items-center mb-1.5">
+                                    <span class="small fw-semibold text-slate-700">Skills Match Progress</span>
+                                    <span class="small fw-bold text-primary">${matchedCount} / ${skillsArray.length}</span>
+                                </div>
+                                <div class="progress mb-2" style="height: 8px; border-radius: 4px;">
+                                    <div class="progress-bar bg-success" style="width: ${(matchedCount / skillsArray.length) * 100}%"></div>
+                                    <div class="progress-bar bg-danger" style="width: ${((skillsArray.length - matchedCount) / skillsArray.length) * 100}%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <span class="x-small text-success"><i class="bi bi-check-circle-fill me-1"></i>Matched: ${matchedCount}</span>
+                                    <span class="x-small text-danger"><i class="bi bi-exclamation-circle-fill me-1"></i>Gap: ${skillsArray.length - matchedCount}</span>
+                                </div>
+                            </div>
+                            ${missingSkillsHtml}
+                        </div>
+
+                        ${recommendationsHtml}
+                    `;
+                    matchProbContainer.classList.remove('d-none');
+
+                    // Animate the SVG circle & ticking number
+                    const circle = matchProbContent.querySelector('.progress-ring__circle');
+                    if (circle) {
+                        const radius = circle.r.baseVal.value;
+                        const circumference = radius * 2 * Math.PI;
+                        circle.style.strokeDasharray = `${circumference} ${circumference}`;
+                        circle.style.strokeDashoffset = circumference;
+                        
+                        // force reflow
+                        circle.getBoundingClientRect();
+                        
+                        const offset = circumference - (matchPercentage / 100) * circumference;
+                        circle.style.strokeDashoffset = offset;
+                    }
+
+                    const percentText = document.getElementById('match-percent-text');
+                    if (percentText && matchPercentage > 0) {
+                        let currentVal = 0;
+                        const duration = 1200; // ms
+                        const stepTime = Math.max(Math.floor(duration / matchPercentage), 10);
+                        const counterInterval = setInterval(() => {
+                            if (currentVal >= matchPercentage) {
+                                clearInterval(counterInterval);
+                                percentText.innerText = `${matchPercentage}%`;
+                            } else {
+                                currentVal++;
+                                percentText.innerText = `${currentVal}%`;
+                            }
+                        }, stepTime);
+                    }
+                } else {
+                    matchProbContent.innerHTML = `
+                        <div class="text-center my-4">
+                            <div class="position-relative d-inline-flex align-items-center justify-content-center">
+                                <svg class="progress-ring" width="120" height="120">
+                                    <circle class="progress-ring__background" stroke="var(--border-main)" stroke-width="8" fill="transparent" r="50" cx="60" cy="60"/>
+                                    <circle class="progress-ring__circle" stroke="#10b981" stroke-width="8" fill="transparent" r="50" cx="60" cy="60"
+                                            style="stroke-linecap: round; transform-origin: 50% 50%;"/>
+                                </svg>
+                                <div class="position-absolute fs-3 fw-bold text-success" id="match-percent-text">0%</div>
+                            </div>
+                        </div>
+                        <p class="text-secondary text-center small mb-3">
+                            No specific skills are required for this role. You are a complete match!
+                        </p>
+
+                        <!-- Skill Gap Analysis -->
+                        <div class="mt-4 pt-3 border-top border-slate-200 anim-slide-in">
+                            <h6 class="fw-bold mb-3 text-dark"><i class="bi bi-diagram-3 text-primary me-2"></i>Skill Gap Analysis</h6>
+                            <div class="p-3 bg-white border border-slate-200 rounded-4 mb-3 shadow-sm">
+                                <div class="d-flex justify-content-between align-items-center mb-1.5">
+                                    <span class="small fw-semibold text-slate-700">Skills Match Progress</span>
+                                    <span class="small fw-bold text-success">100%</span>
+                                </div>
+                                <div class="progress mb-2" style="height: 8px; border-radius: 4px;">
+                                    <div class="progress-bar bg-success" style="width: 100%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${recommendationsHtml}
+                    `;
+                    matchProbContainer.classList.remove('d-none');
+
+                    // Animate the SVG circle & ticking number
+                    const circle = matchProbContent.querySelector('.progress-ring__circle');
+                    if (circle) {
+                        const radius = circle.r.baseVal.value;
+                        const circumference = radius * 2 * Math.PI;
+                        circle.style.strokeDasharray = `${circumference} ${circumference}`;
+                        circle.style.strokeDashoffset = circumference;
+                        circle.getBoundingClientRect();
+                        circle.style.strokeDashoffset = 0;
+                    }
+
+                    const percentText = document.getElementById('match-percent-text');
+                    if (percentText) {
+                        let currentVal = 0;
+                        const counterInterval = setInterval(() => {
+                            if (currentVal >= 100) {
+                                clearInterval(counterInterval);
+                                percentText.innerText = `100%`;
+                            } else {
+                                currentVal += 2;
+                                percentText.innerText = `${currentVal}%`;
+                            }
+                        }, 15);
+                    }
                 }
 
                 // Render Action Button
