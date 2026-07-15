@@ -19,7 +19,7 @@ const SmartDoors = () => {
   const fetchDoors = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:5000/api/smart-doors');
+      const response = await axios.get('/api/smart-doors');
       if (response.data.success) setDoors(response.data.doors || []);
     } catch (error) {
       triggerToast('Unable to load smart doors', 'error');
@@ -47,10 +47,10 @@ const SmartDoors = () => {
     e.preventDefault();
     try {
       if (editingId) {
-        await axios.put(`http://localhost:5000/api/smart-doors/${editingId}`, formData);
+        await axios.put(`/api/smart-doors/${editingId}`, formData);
         triggerToast('Smart door updated');
       } else {
-        await axios.post('http://localhost:5000/api/smart-doors', formData);
+        await axios.post('/api/smart-doors', formData);
         triggerToast('Smart door created');
       }
       setShowModal(false);
@@ -62,7 +62,7 @@ const SmartDoors = () => {
 
   const toggleDoor = async (door) => {
     try {
-      await axios.patch(`http://localhost:5000/api/smart-doors/${door._id}/toggle`);
+      await axios.patch(`/api/smart-doors/${door._id}/toggle`);
       triggerToast(`Door ${door.isEnabled ? 'disabled' : 'enabled'}`);
       fetchDoors();
     } catch (error) {
@@ -73,7 +73,7 @@ const SmartDoors = () => {
   const deleteDoor = async (id) => {
     if (!window.confirm('Delete this smart door record?')) return;
     try {
-      await axios.delete(`http://localhost:5000/api/smart-doors/${id}`);
+      await axios.delete(`/api/smart-doors/${id}`);
       triggerToast('Smart door removed');
       fetchDoors();
     } catch (error) {

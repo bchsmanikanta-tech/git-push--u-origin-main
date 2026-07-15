@@ -35,9 +35,9 @@ const Vacancies = () => {
     setLoading(true);
     try {
       const [vacancyRes, userRes, doorRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/vacancies', { params: { search, status, limit: 20 } }),
-        axios.get('http://localhost:5000/api/users', { params: { limit: 50 } }),
-        axios.get('http://localhost:5000/api/smart-doors', { params: { limit: 50 } })
+        axios.get('/api/vacancies', { params: { search, status, limit: 20 } }),
+        axios.get('/api/users', { params: { limit: 50 } }),
+        axios.get('/api/smart-doors', { params: { limit: 50 } })
       ]);
       if (vacancyRes.data.success) setVacancies(vacancyRes.data.vacancies || []);
       if (userRes.data.success) setUsers(userRes.data.users || []);
@@ -99,10 +99,10 @@ const Vacancies = () => {
         expiresAt: formData.expiresAt || null
       };
       if (editingId) {
-        await axios.put(`http://localhost:5000/api/vacancies/${editingId}`, payload);
+        await axios.put(`/api/vacancies/${editingId}`, payload);
         triggerToast('Vacancy updated');
       } else {
-        await axios.post('http://localhost:5000/api/vacancies', payload);
+        await axios.post('/api/vacancies', payload);
         triggerToast('Vacancy created');
       }
       setShowModal(false);
@@ -114,7 +114,7 @@ const Vacancies = () => {
 
   const handleApproval = async (vacancy, nextStatus) => {
     try {
-      await axios.patch(`http://localhost:5000/api/vacancies/${vacancy._id}/approval`, { status: nextStatus });
+      await axios.patch(`/api/vacancies/${vacancy._id}/approval`, { status: nextStatus });
       triggerToast(`Vacancy ${nextStatus.toLowerCase()}`);
       fetchData();
     } catch (error) {
@@ -124,7 +124,7 @@ const Vacancies = () => {
 
   const markFilled = async (id) => {
     try {
-      await axios.patch(`http://localhost:5000/api/vacancies/${id}/filled`);
+      await axios.patch(`/api/vacancies/${id}/filled`);
       triggerToast('Vacancy marked filled');
       fetchData();
     } catch (error) {
@@ -135,7 +135,7 @@ const Vacancies = () => {
   const deleteVacancy = async (id) => {
     if (!window.confirm('Delete this vacancy?')) return;
     try {
-      await axios.delete(`http://localhost:5000/api/vacancies/${id}`);
+      await axios.delete(`/api/vacancies/${id}`);
       triggerToast('Vacancy deleted');
       fetchData();
     } catch (error) {

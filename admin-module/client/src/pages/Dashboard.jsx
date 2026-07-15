@@ -41,7 +41,7 @@ const Dashboard = () => {
 
   const fetchDashboardStats = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/analytics/dashboard');
+      const response = await axios.get('/api/analytics/dashboard');
       if (response.data.success) {
         setData(response.data);
       }
@@ -63,7 +63,7 @@ const Dashboard = () => {
   };
 
   const handleExport = (format) => {
-    window.open(`http://localhost:5000/api/analytics/export/${format}?token=${localStorage.getItem('adminToken')}`, '_blank');
+    window.open(`/api/analytics/export/${format}?token=${localStorage.getItem('adminToken')}`, '_blank');
   };
 
   if (loading) {

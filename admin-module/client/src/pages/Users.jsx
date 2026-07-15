@@ -64,7 +64,7 @@ const Users = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:5000/api/users', {
+      const response = await axios.get('/api/users', {
         params: { search, role, status, sortBy, order, page, limit: 8 }
       });
       if (response.data.success) {
@@ -115,7 +115,7 @@ const Users = () => {
     }
     
     try {
-      const response = await axios.patch(`http://localhost:5000/api/users/${id}/status`, { status: nextStatus });
+      const response = await axios.patch(`/api/users/${id}/status`, { status: nextStatus });
       if (response.data.success) {
         triggerToast(`User status updated to ${nextStatus}`, 'success');
         fetchUsers();
@@ -129,7 +129,7 @@ const Users = () => {
   const handleDeleteUser = async (id) => {
     if (!window.confirm('Are you sure you want to permanently delete this user?')) return;
     try {
-      const response = await axios.delete(`http://localhost:5000/api/users/${id}`);
+      const response = await axios.delete(`/api/users/${id}`);
       if (response.data.success) {
         triggerToast('User deleted successfully', 'success');
         fetchUsers();
@@ -143,7 +143,7 @@ const Users = () => {
   const handleResetPassword = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.patch(`http://localhost:5000/api/users/${resetUserId}/reset-password`, { newPassword });
+      const response = await axios.patch(`/api/users/${resetUserId}/reset-password`, { newPassword });
       if (response.data.success) {
         triggerToast('Password reset successfully', 'success');
         setShowResetModal(false);
@@ -164,7 +164,7 @@ const Users = () => {
     if (!window.confirm(`Are you sure you want to execute bulk ${action}?`)) return;
 
     try {
-      const response = await axios.post('http://localhost:5000/api/users/bulk', {
+      const response = await axios.post('/api/users/bulk', {
         ids: selectedIds,
         action,
         status: targetStatus
@@ -212,14 +212,14 @@ const Users = () => {
     e.preventDefault();
     try {
       if (isEditMode) {
-        const response = await axios.put(`http://localhost:5000/api/users/${currentUserId}`, formData);
+        const response = await axios.put(`/api/users/${currentUserId}`, formData);
         if (response.data.success) {
           triggerToast('User updated successfully', 'success');
           setShowModal(false);
           fetchUsers();
         }
       } else {
-        const response = await axios.post('http://localhost:5000/api/users', formData);
+        const response = await axios.post('/api/users', formData);
         if (response.data.success) {
           triggerToast('User created successfully', 'success');
           setShowModal(false);

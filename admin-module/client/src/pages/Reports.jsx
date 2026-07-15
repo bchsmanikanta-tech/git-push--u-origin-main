@@ -17,7 +17,7 @@ const Reports = () => {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:5000/api/analytics/reports');
+      const response = await axios.get('/api/analytics/reports');
       if (response.data.success) setReports(response.data.reports || []);
     } catch (error) {
       triggerToast('Unable to fetch reports', 'error');
@@ -34,7 +34,7 @@ const Reports = () => {
     e.preventDefault();
     try {
       const payload = { ...notificationData, channels: notificationData.channels || ['System'] };
-      const response = await axios.post('http://localhost:5000/api/analytics/notifications', payload);
+      const response = await axios.post('/api/analytics/notifications', payload);
       if (response.data.success) {
         triggerToast('Notification sent');
         setNotificationData({ title: '', message: '', type: 'Broadcast', channels: ['System'] });

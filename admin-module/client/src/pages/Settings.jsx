@@ -16,7 +16,7 @@ const Settings = () => {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/analytics/settings');
+        const response = await axios.get('/api/analytics/settings');
         if (response.data.success) setSettings(response.data.settings);
       } catch (error) {
         triggerToast('Unable to load settings', 'error');
@@ -28,7 +28,7 @@ const Settings = () => {
   const saveSettings = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.put('http://localhost:5000/api/analytics/settings', settings);
+      const response = await axios.put('/api/analytics/settings', settings);
       if (response.data.success) triggerToast('System settings updated');
     } catch (error) {
       triggerToast('Unable to update settings', 'error');
@@ -38,7 +38,7 @@ const Settings = () => {
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.put('http://localhost:5000/api/auth/change-password', passwordForm);
+      const response = await axios.put('/api/auth/change-password', passwordForm);
       if (response.data.success) {
         triggerToast('Password updated');
         setPasswordForm({ currentPassword: '', newPassword: '' });
@@ -50,7 +50,7 @@ const Settings = () => {
 
   const toggle2FA = async () => {
     try {
-      const response = await axios.put('http://localhost:5000/api/auth/toggle-2fa');
+      const response = await axios.put('/api/auth/toggle-2fa');
       if (response.data.success) triggerToast(response.data.message);
     } catch (error) {
       triggerToast('Unable to update 2FA preferences', 'error');
