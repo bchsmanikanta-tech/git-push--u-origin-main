@@ -192,6 +192,13 @@
                 }
             }
 
+            // Check tab query parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialTab = urlParams.get('tab');
+            if (initialTab === 'saved') {
+                switchView('saved');
+            }
+
             menuDashboard.addEventListener('click', (e) => {
                 e.preventDefault();
                 switchView('dashboard');
