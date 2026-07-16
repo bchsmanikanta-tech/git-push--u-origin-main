@@ -142,7 +142,8 @@
                 try {
                     // Load profile first to get savedJobs if not loaded
                     if (!seekerProfile) {
-                        seekerProfile = await API.profile.getSeeker(user.email);
+                        const profileRes = await API.profile.getSeeker(user.email);
+                        seekerProfile = profileRes.profile;
                     }
 
                     // Prepare query payload
