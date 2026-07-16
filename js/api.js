@@ -48,6 +48,14 @@ try {
         if (urlEmail && urlName && urlRole) {
             const user = { name: urlName, email: urlEmail, role: urlRole };
             SafeStorage.setItem('user', JSON.stringify(user));
+            
+            // Clean up the URL query parameters only if localStorage is persistent
+            if (SafeStorage.isPersistent) {
+                try {
+                    const cleanUrl = window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                } catch (e) {}
+            }
         }
     } catch (e) {
         console.error('Failed to restore URL session parameters', e);
@@ -168,7 +176,7 @@ const Session = {
 
     redirect(targetUrl) {
         const user = this.getUser();
-        if (user && !SafeStorage.isPersistent) {
+        if (user) {
             const sep = targetUrl.includes('?') ? '&' : '?';
             window.location.href = `${targetUrl}${sep}session_email=${encodeURIComponent(user.email)}&session_name=${encodeURIComponent(user.name)}&session_role=${encodeURIComponent(user.role)}`;
         } else {
