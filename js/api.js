@@ -3,10 +3,12 @@
 // Safe Storage fallback for environments where localStorage is blocked (e.g. file:// protocol or private browsing)
 const SafeStorage = {
     _memoryStore: {},
+    isPersistent: true,
     getItem(key) {
         try {
             return localStorage.getItem(key);
         } catch (e) {
+            this.isPersistent = false;
             return this._memoryStore[key] || null;
         }
     },
@@ -14,6 +16,7 @@ const SafeStorage = {
         try {
             localStorage.setItem(key, value);
         } catch (e) {
+            this.isPersistent = false;
             this._memoryStore[key] = String(value);
         }
     },
@@ -21,10 +24,35 @@ const SafeStorage = {
         try {
             localStorage.removeItem(key);
         } catch (e) {
+            this.isPersistent = false;
             delete this._memoryStore[key];
         }
     }
 };
+
+// Check if localStorage is persistent early
+try {
+    localStorage.setItem('__sjvf_test__', '1');
+    localStorage.removeItem('__sjvf_test__');
+} catch (e) {
+    SafeStorage.isPersistent = false;
+}
+
+// Restore session from URL parameters if persistent storage is not available or blocked
+(function() {
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlEmail = urlParams.get('session_email');
+        const urlName = urlParams.get('session_name');
+        const urlRole = urlParams.get('session_role');
+        if (urlEmail && urlName && urlRole) {
+            const user = { name: urlName, email: urlEmail, role: urlRole };
+            SafeStorage.setItem('user', JSON.stringify(user));
+        }
+    } catch (e) {
+        console.error('Failed to restore URL session parameters', e);
+    }
+})();
 
 // ============================================================
 // 🚀 DEPLOYMENT CONFIGURATION
@@ -121,21 +149,31 @@ const Session = {
         this.clear();
         showToast("Logged out successfully!", "info");
         setTimeout(() => {
-            window.location.href = 'index.html';
+            this.redirect('index.html');
         }, 1000);
     },
 
     checkAuth(requiredRole) {
         const user = this.getUser();
         if (!user) {
-            window.location.href = 'index.html';
+            this.redirect('index.html');
             return null;
         }
         if (requiredRole && user.role !== requiredRole) {
-            window.location.href = user.role === 'seeker' ? 'jobseeker-dashboard.html' : 'company-dashboard.html';
+            this.redirect(user.role === 'seeker' ? 'jobseeker-dashboard.html' : 'company-dashboard.html');
             return null;
         }
         return user;
+    },
+
+    redirect(targetUrl) {
+        const user = this.getUser();
+        if (user && !SafeStorage.isPersistent) {
+            const sep = targetUrl.includes('?') ? '&' : '?';
+            window.location.href = `${targetUrl}${sep}session_email=${encodeURIComponent(user.email)}&session_name=${encodeURIComponent(user.name)}&session_role=${encodeURIComponent(user.role)}`;
+        } else {
+            window.location.href = targetUrl;
+        }
     }
 };
 
@@ -566,15 +604,38 @@ const NotificationsManager = {
 
 Theme.applyEarly();
 
+// Link session parameters auto-propagation if storage is not persistent
+function initSessionAutoPropagation() {
+    if (!SafeStorage.isPersistent) {
+        const user = Session.getUser();
+        if (user) {
+            const updateLinks = () => {
+                document.querySelectorAll('a').forEach(a => {
+                    const href = a.getAttribute('href');
+                    if (href && !href.startsWith('http') && !href.startsWith('#') && !href.startsWith('javascript:') && !href.includes('session_email')) {
+                        const sep = href.includes('?') ? '&' : '?';
+                        a.setAttribute('href', `${href}${sep}session_email=${encodeURIComponent(user.email)}&session_name=${encodeURIComponent(user.name)}&session_role=${encodeURIComponent(user.role)}`);
+                    }
+                });
+            };
+            updateLinks();
+            const observer = new MutationObserver(updateLinks);
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
+    }
+}
+
 // Initialize fully on load
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         Theme.injectToggleButton();
         NotificationsManager.injectNotifications();
+        initSessionAutoPropagation();
     });
 } else {
     Theme.injectToggleButton();
     NotificationsManager.injectNotifications();
+    initSessionAutoPropagation();
 }
 
 // Expose globally

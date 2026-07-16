@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>!function(){var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}();</script>
+    <script>!function(){try{var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}}();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Seeker Dashboard - Smart Job Finder</title>
     
@@ -163,7 +163,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             // Auth check
             console.log('[DASHBOARD] Checking auth...');
-            console.log('[DASHBOARD] Raw localStorage user:', localStorage.getItem('user'));
+            console.log('[DASHBOARD] Raw localStorage user:', SafeStorage.getItem('user'));
             const user = Session.checkAuth('seeker');
             console.log('[DASHBOARD] Auth result:', JSON.stringify(user));
             if (!user) {

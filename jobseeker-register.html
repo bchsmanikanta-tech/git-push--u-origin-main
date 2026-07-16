@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>!function(){var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}();</script>
+    <script>!function(){try{var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}}();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Seeker Registration - Smart Job Finder</title>
     
@@ -70,12 +70,15 @@
 
             // Pre-check: ping server to show warning early
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
                 const resp = await fetch(
                     (window.location.protocol === 'file:' ? 'http://localhost:5000' : '') + '/api/status',
-                    { signal: AbortSignal.timeout(3000) }
+                    { signal: controller.signal }
                 );
+                clearTimeout(timeoutId);
                 if (!resp.ok) throw new Error('Server error');
-            } catch {
+            } catch (err) {
                 showToast('⚠️ Cannot reach the server. Make sure you ran: npm start', 'error');
             }
 

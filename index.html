@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>!function(){var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}();</script>
+    <script>!function(){try{var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}}();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Job Vacancy Finder</title>
     
@@ -20,9 +20,9 @@
             const user = Session.getUser();
             if (user) {
                 if (user.role === 'seeker') {
-                    window.location.href = 'jobseeker-dashboard.html';
+                    Session.redirect('jobseeker-dashboard.html');
                 } else if (user.role === 'company') {
-                    window.location.href = 'company-dashboard.html';
+                    Session.redirect('company-dashboard.html');
                 }
             }
         });

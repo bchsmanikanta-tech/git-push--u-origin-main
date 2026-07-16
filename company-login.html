@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>!function(){var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}();</script>
+    <script>!function(){try{var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}}();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Company Login - Smart Job Finder</title>
     
@@ -95,7 +95,7 @@
                     showToast(data.message || "Logged in successfully!", "success");
                     
                     setTimeout(() => {
-                        window.location.href = 'company-dashboard.html';
+                        Session.redirect('company-dashboard.html');
                     }, 1000);
                 } catch (err) {
                     console.error('[COMPANY LOGIN] ERROR:', err);

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>!function(){var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}();</script>
+    <script>!function(){try{var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}}();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Seeker Login - Smart Job Finder</title>
     
@@ -103,7 +103,7 @@
                     
                     setTimeout(() => {
                         console.log('[LOGIN] Step 6: Redirecting NOW to jobseeker-dashboard.html');
-                        window.location.href = 'jobseeker-dashboard.html';
+                        Session.redirect('jobseeker-dashboard.html');
                     }, 1000);
                 } catch (err) {
                     console.error('[LOGIN] ERROR:', err);
