@@ -101,7 +101,7 @@
                     Session.setUser({ name, email: email.toLowerCase(), role: 'seeker' });
                     
                     setTimeout(() => {
-                        window.location.href = 'jobseeker-dashboard.html';
+                        Session.redirect('jobseeker-dashboard.html');
                     }, 1200);
                 } catch (err) {
                     // Toast error is handled inside apiRequest; re-enable button

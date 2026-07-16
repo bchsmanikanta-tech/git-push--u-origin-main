@@ -81,7 +81,7 @@
                     Session.setUser({ name, email: email.toLowerCase(), role: 'company' });
                     
                     setTimeout(() => {
-                        window.location.href = 'company-dashboard.html';
+                        Session.redirect('company-dashboard.html');
                     }, 1200);
                 } catch (err) {
                     // Toast error is handled inside apiRequest
