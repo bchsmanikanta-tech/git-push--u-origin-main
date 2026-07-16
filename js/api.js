@@ -190,7 +190,7 @@ async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout to 15s to handle cold starts
     options.signal = controller.signal;
     
     // Set headers if JSON request

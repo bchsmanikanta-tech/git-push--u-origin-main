@@ -8,7 +8,12 @@ let isConnected = false;
 async function testConnection() {
   if (isConnected) return true;
   try {
-    await mongoose.connect(connectionString);
+    await mongoose.connect(connectionString, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4 // Force IPv4 to bypass slow IPv6 lookups
+    });
     isConnected = true;
     console.log('[DB] MongoDB connected successfully');
     return true;
