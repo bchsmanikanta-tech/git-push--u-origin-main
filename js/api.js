@@ -189,6 +189,10 @@ const Session = {
 async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    options.signal = controller.signal;
+    
     // Set headers if JSON request
     if (options.body && !(options.body instanceof FormData)) {
         options.headers = {
@@ -200,6 +204,7 @@ async function apiRequest(endpoint, options = {}) {
 
     try {
         const response = await fetch(url, options);
+        clearTimeout(timeoutId);
         const data = await response.json();
         
         if (!response.ok) {
@@ -207,8 +212,16 @@ async function apiRequest(endpoint, options = {}) {
         }
         return data;
     } catch (error) {
+        clearTimeout(timeoutId);
         console.error(`API Error [${endpoint}]:`, error);
-        showToast(error.message || 'Network error occurred.', 'error');
+        
+        if (error.name === 'AbortError') {
+            showToast('⚠️ Request timed out. Make sure your backend server is running (npm start).', 'error');
+        } else if (error.message && error.message.includes('Failed to fetch')) {
+            showToast('⚠️ Cannot reach server. Please run: npm start in the project directory.', 'error');
+        } else {
+            showToast(error.message || 'Network error occurred.', 'error');
+        }
         throw error;
     }
 }
