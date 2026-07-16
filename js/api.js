@@ -1,5 +1,31 @@
 // Centralized API and Session Manager for Smart Job Vacancy Finder
 
+// Safe Storage fallback for environments where localStorage is blocked (e.g. file:// protocol or private browsing)
+const SafeStorage = {
+    _memoryStore: {},
+    getItem(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            return this._memoryStore[key] || null;
+        }
+    },
+    setItem(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            this._memoryStore[key] = String(value);
+        }
+    },
+    removeItem(key) {
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {
+            delete this._memoryStore[key];
+        }
+    }
+};
+
 // ============================================================
 // 🚀 DEPLOYMENT CONFIGURATION
 // We now deploy both frontend and backend to Netlify
@@ -68,7 +94,7 @@ function showToast(message, type = 'success') {
 const Session = {
     getUser() {
         try {
-            const data = localStorage.getItem('user');
+            const data = SafeStorage.getItem('user');
             return data ? JSON.parse(data) : null;
         } catch {
             return null;
@@ -76,11 +102,19 @@ const Session = {
     },
     
     setUser(user) {
-        localStorage.setItem('user', JSON.stringify(user));
+        try {
+            SafeStorage.setItem('user', JSON.stringify(user));
+        } catch (e) {
+            console.error('Failed to set user session', e);
+        }
     },
     
     clear() {
-        localStorage.removeItem('user');
+        try {
+            SafeStorage.removeItem('user');
+        } catch (e) {
+            console.error('Failed to clear session', e);
+        }
     },
 
     logout() {
@@ -368,11 +402,11 @@ const Theme = {
     KEY: 'sjvf_theme',
 
     get() {
-        return localStorage.getItem(this.KEY) || 'light';
+        return SafeStorage.getItem(this.KEY) || 'light';
     },
 
     set(mode) {
-        localStorage.setItem(this.KEY, mode);
+        SafeStorage.setItem(this.KEY, mode);
         document.documentElement.setAttribute('data-theme', mode);
         document.body.setAttribute('data-theme', mode);
         this._updateIcon(mode);
@@ -385,7 +419,7 @@ const Theme = {
 
     // Apply saved theme immediately (called before DOMContentLoaded to prevent FOUC)
     applyEarly() {
-        const saved = localStorage.getItem(this.KEY) || 'light';
+        const saved = SafeStorage.getItem(this.KEY) || 'light';
         document.documentElement.setAttribute('data-theme', saved);
     },
 
