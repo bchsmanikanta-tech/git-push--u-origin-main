@@ -168,7 +168,13 @@ const Session = {
             return null;
         }
         if (requiredRole && user.role !== requiredRole) {
-            this.redirect(user.role === 'seeker' ? 'jobseeker-dashboard.html' : 'company-dashboard.html');
+            if (user.role === 'seeker') {
+                this.redirect('jobseeker-dashboard.html');
+            } else if (user.role === 'company') {
+                this.redirect('company-dashboard.html');
+            } else {
+                this.redirect('index.html');
+            }
             return null;
         }
         return user;
