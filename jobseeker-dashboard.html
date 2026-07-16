@@ -162,8 +162,14 @@
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
             // Auth check
+            console.log('[DASHBOARD] Checking auth...');
+            console.log('[DASHBOARD] Raw localStorage user:', localStorage.getItem('user'));
             const user = Session.checkAuth('seeker');
-            if (!user) return;
+            console.log('[DASHBOARD] Auth result:', JSON.stringify(user));
+            if (!user) {
+                console.log('[DASHBOARD] No valid user session found, redirecting to index.html');
+                return;
+            }
             
             // Set user name
             document.getElementById('seeker-name').innerText = user.name;

@@ -61,22 +61,47 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const form = document.getElementById('loginForm');
+            const submitBtn = form.querySelector('button[type="submit"]');
+
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
                 const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
+
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Signing In...';
                 
                 try {
+                    console.log('[COMPANY LOGIN] Step 1: Calling API...');
                     const data = await API.auth.loginCompany(email, password);
+                    console.log('[COMPANY LOGIN] Step 2: Response:', JSON.stringify(data));
+                    
+                    if (!data || !data.user) {
+                        throw new Error('Server returned invalid response - no user data');
+                    }
+                    
                     Session.setUser(data.user);
+                    const savedUser = Session.getUser();
+                    console.log('[COMPANY LOGIN] Step 3: Session saved:', JSON.stringify(savedUser));
+                    
+                    if (!savedUser) {
+                        showToast('Login succeeded but session could not be saved.', 'error');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Corporate Sign In';
+                        return;
+                    }
+                    
                     showToast(data.message || "Logged in successfully!", "success");
                     
                     setTimeout(() => {
                         window.location.href = 'company-dashboard.html';
                     }, 1000);
                 } catch (err) {
-                    // Toast error is automatically rendered by apiRequest
+                    console.error('[COMPANY LOGIN] ERROR:', err);
+                    showToast(err.message || 'Login failed. Please try again.', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Corporate Sign In';
                 }
             });
         });

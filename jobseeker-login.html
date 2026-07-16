@@ -76,15 +76,38 @@
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Signing In...';
                 
                 try {
+                    console.log('[LOGIN] Step 1: Calling API.auth.loginSeeker...');
                     const data = await API.auth.loginSeeker(email, password);
+                    console.log('[LOGIN] Step 2: API response received:', JSON.stringify(data));
+                    
+                    if (!data || !data.user) {
+                        throw new Error('Server returned invalid response - no user data');
+                    }
+                    
+                    console.log('[LOGIN] Step 3: Saving session...');
                     Session.setUser(data.user);
+                    
+                    // Verify session was saved
+                    const savedUser = Session.getUser();
+                    console.log('[LOGIN] Step 4: Session verified:', JSON.stringify(savedUser));
+                    
+                    if (!savedUser) {
+                        showToast('Login succeeded but session could not be saved. Please check browser settings.', 'error');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Sign In';
+                        return;
+                    }
+                    
                     showToast(data.message || "Logged in successfully!", "success");
+                    console.log('[LOGIN] Step 5: Redirecting to dashboard in 1 second...');
                     
                     setTimeout(() => {
+                        console.log('[LOGIN] Step 6: Redirecting NOW to jobseeker-dashboard.html');
                         window.location.href = 'jobseeker-dashboard.html';
                     }, 1000);
                 } catch (err) {
-                    // Toast error is automatically rendered by apiRequest
+                    console.error('[LOGIN] ERROR:', err);
+                    showToast(err.message || 'Login failed. Please try again.', 'error');
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Sign In';
                 }
