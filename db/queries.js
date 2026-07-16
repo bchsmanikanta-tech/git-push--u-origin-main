@@ -77,12 +77,12 @@ const mapAdmin = (r) => ({
 
 // ---------- Job Seekers ----------
 const listJobseekers = async () => {
-  const rows = await Jobseeker.find({}, { resume: 0, photo: 0, cover_letter: 0 }).sort({ _id: 1 });
+  const rows = await Jobseeker.find({}, { resume: 0, photo: 0, cover_letter: 0 }).sort({ _id: 1 }).lean();
   return rows.map(mapJobseeker);
 };
 
 const getJobseekerByEmail = async (email) => {
-  const row = await Jobseeker.findOne({ email: email.toLowerCase() });
+  const row = await Jobseeker.findOne({ email: email.toLowerCase() }).lean();
   return row ? mapJobseeker(row) : null;
 };
 
@@ -123,12 +123,12 @@ const setJobseekerStatus = async (email, status) => {
 
 // ---------- Companies ----------
 const listCompanies = async () => {
-  const rows = await Company.find().sort({ _id: 1 });
+  const rows = await Company.find().sort({ _id: 1 }).lean();
   return rows.map(mapCompany);
 };
 
 const getCompanyByEmail = async (email) => {
-  const row = await Company.findOne({ email: email.toLowerCase() });
+  const row = await Company.findOne({ email: email.toLowerCase() }).lean();
   return row ? mapCompany(row) : null;
 };
 
@@ -166,13 +166,13 @@ const setCompanyStatus = async (email, status) => {
 };
 
 // ---------- Jobs ----------
-const listJobs = async () => {
-  const rows = await Job.find().sort({ created_at: -1 });
+const listJobs = async (filter = {}) => {
+  const rows = await Job.find(filter).sort({ created_at: -1 }).lean();
   return rows.map(mapJob);
 };
 
 const getJobById = async (id) => {
-  const row = await Job.findById(id);
+  const row = await Job.findById(id).lean();
   return row ? mapJob(row) : null;
 };
 
@@ -233,7 +233,7 @@ const toggleJobFeatured = async (id) => {
 
 // ---------- Applications ----------
 const listApplications = async () => {
-  const rows = await Application.find().sort({ _id: 1 });
+  const rows = await Application.find().sort({ _id: 1 }).lean();
   return rows.map(mapApplication);
 };
 
@@ -247,7 +247,7 @@ const getApplicationsBySeeker = async (email) => {
       seeker_email: 1, seeker_name: 1, applied_date: 1, status: 1,
       cgpa: 1, address: 1, city: 1, state: 1, cover_letter: 1
     }
-  );
+  ).lean();
   return rows.map(mapApplication);
 };
 
@@ -261,17 +261,17 @@ const getApplicationsByCompany = async (email) => {
       seeker_email: 1, seeker_name: 1, applied_date: 1, status: 1,
       cgpa: 1, address: 1, city: 1, state: 1, cover_letter: 1
     }
-  );
+  ).lean();
   return rows.map(mapApplication);
 };
 
 const getApplicationById = async (id) => {
-  const row = await Application.findById(id);
+  const row = await Application.findById(id).lean();
   return row ? mapApplication(row) : null;
 };
 
 const applicationExists = async (jobId, seekerEmail) => {
-  const row = await Application.findOne({ job_id: jobId, seeker_email: seekerEmail.toLowerCase() });
+  const row = await Application.findOne({ job_id: jobId, seeker_email: seekerEmail.toLowerCase() }).lean();
   return !!row;
 };
 
@@ -304,12 +304,12 @@ const setApplicationStatus = async (id, status) => {
 
 // ---------- Admins ----------
 const listAdmins = async () => {
-  const rows = await Admin.find().sort({ _id: 1 });
+  const rows = await Admin.find().sort({ _id: 1 }).lean();
   return rows.map(mapAdmin);
 };
 
 const getAdminByEmail = async (email) => {
-  const row = await Admin.findOne({ email: email.toLowerCase() });
+  const row = await Admin.findOne({ email: email.toLowerCase() }).lean();
   return row ? mapAdmin(row) : null;
 };
 
@@ -354,7 +354,7 @@ const createNotification = async (data) => {
 };
 
 const listNotificationsByEmail = async (email) => {
-  const rows = await UserNotification.find({ recipient_email: email.toLowerCase() }).sort({ created_at: -1 });
+  const rows = await UserNotification.find({ recipient_email: email.toLowerCase() }).sort({ created_at: -1 }).lean();
   return rows.map(mapUserNotification);
 };
 
@@ -382,9 +382,9 @@ const removeSavedJob = async (email, jobId) => {
 };
 
 const listSavedJobs = async (email) => {
-  const seeker = await Jobseeker.findOne({ email: email.toLowerCase() });
+  const seeker = await Jobseeker.findOne({ email: email.toLowerCase() }).lean();
   if (!seeker || !seeker.saved_jobs || seeker.saved_jobs.length === 0) return [];
-  const rows = await Job.find({ _id: { $in: seeker.saved_jobs } });
+  const rows = await Job.find({ _id: { $in: seeker.saved_jobs } }).lean();
   return rows.map(r => ({
     id: r._id.toString(),
     title: r.title,

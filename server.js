@@ -342,39 +342,38 @@ app.post('/api/profile/upload-certificate', (req, res, next) => {
 
 // Get All Active Jobs (Supports filtering and pagination)
 app.get('/api/jobs', async (req, res) => {
-    const { title, location, type, experience, minSalary, page, limit } = req.query;
+    const { title, location, type, experience, minSalary, page, limit, companyEmail } = req.query;
     try {
-        let filteredJobs = (await db.listJobs()).filter(job => job.status === "Active");
+        const filter = {};
+        
+        if (companyEmail) {
+            filter.company_email = companyEmail.toLowerCase();
+        } else {
+            filter.status = "Active";
+        }
 
         if (title) {
-            const titleQuery = title.toLowerCase();
-            filteredJobs = filteredJobs.filter(job =>
-                job.title.toLowerCase().includes(titleQuery) ||
-                job.companyName.toLowerCase().includes(titleQuery) ||
-                job.skills.toLowerCase().includes(titleQuery)
-            );
+            const titleQuery = title.trim();
+            filter.$or = [
+                { title: new RegExp(titleQuery, 'i') },
+                { company_name: new RegExp(titleQuery, 'i') },
+                { skills: new RegExp(titleQuery, 'i') }
+            ];
         }
 
         if (location) {
-            const locQuery = location.toLowerCase();
-            filteredJobs = filteredJobs.filter(job =>
-                job.location.toLowerCase().includes(locQuery)
-            );
+            filter.location = new RegExp(location.trim(), 'i');
         }
 
         if (type && type !== 'All') {
-            const typeQuery = type.toLowerCase();
-            filteredJobs = filteredJobs.filter(job =>
-                job.type.toLowerCase() === typeQuery
-            );
+            filter.type = new RegExp('^' + type.trim() + '$', 'i');
         }
 
         if (experience && experience !== 'All') {
-            const expQuery = experience.toLowerCase();
-            filteredJobs = filteredJobs.filter(job =>
-                job.experience.toLowerCase().includes(expQuery)
-            );
+            filter.experience = new RegExp(experience.trim(), 'i');
         }
+
+        let filteredJobs = await db.listJobs(filter);
 
         if (minSalary) {
             const minSalVal = parseInt(minSalary, 10) || 0;

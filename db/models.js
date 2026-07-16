@@ -30,7 +30,7 @@ const CompanySchema = new Schema({
 const JobSchema = new Schema({
   _id: { type: String, required: true }, // mapping to id
   title: { type: String, required: true },
-  company_email: { type: String, required: true },
+  company_email: { type: String, required: true, index: true },
   company_name: { type: String, required: true },
   location: { type: String, default: '' },
   salary: { type: String, default: '' },
@@ -47,11 +47,11 @@ const JobSchema = new Schema({
 
 const ApplicationSchema = new Schema({
   _id: { type: String, required: true }, // mapping to id
-  job_id: { type: String, required: true },
+  job_id: { type: String, required: true, index: true },
   job_title: { type: String, default: '' },
-  company_email: { type: String, default: '' },
+  company_email: { type: String, default: '', index: true },
   company_name: { type: String, default: '' },
-  seeker_email: { type: String, default: '' },
+  seeker_email: { type: String, default: '', index: true },
   seeker_name: { type: String, default: '' },
   applied_date: { type: String, default: '' },
   resume: { type: String, default: '' },
@@ -114,7 +114,7 @@ const NotificationSchema = new Schema({
 
 const UserNotificationSchema = new Schema({
   _id: { type: String, required: true },
-  recipient_email: { type: String, required: true },
+  recipient_email: { type: String, required: true, index: true },
   title: { type: String, required: true },
   message: { type: String, required: true },
   is_read: { type: Boolean, default: false },

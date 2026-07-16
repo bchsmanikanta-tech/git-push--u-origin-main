@@ -247,6 +247,7 @@ const API = {
             if (filters.type) params.append('type', filters.type);
             if (filters.experience) params.append('experience', filters.experience);
             if (filters.minSalary) params.append('minSalary', filters.minSalary);
+            if (filters.companyEmail) params.append('companyEmail', filters.companyEmail);
             if (filters.page) params.append('page', filters.page);
             if (filters.limit) params.append('limit', filters.limit);
             

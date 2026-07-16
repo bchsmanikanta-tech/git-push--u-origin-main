@@ -156,9 +156,9 @@
             let outcomesChart = null;
 
             try {
-                // Fetch active job list
-                const jobsData = await API.jobs.getAll();
-                const myJobs = jobsData.jobs.filter(j => j.companyEmail === user.email);
+                // Fetch company's posted jobs directly from database using query filter
+                const jobsData = await API.jobs.getAll({ companyEmail: user.email });
+                const myJobs = jobsData.jobs;
                 
                 // Fetch applications details
                 const appsData = await API.applications.getForCompany(user.email);
