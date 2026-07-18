@@ -895,8 +895,8 @@ const ensureDefaultAdmin = async () => {
     try {
         const exists = await Admin.findOne({ email: 'admin@smartjob.com' });
         if (!exists) {
-            await Admin.create({ name: 'Super Admin', email: 'admin@smartjob.com', password: 'Admin@123', role: 'Super Admin', status: 'Active' });
-            console.log('[ADMIN] Default admin created → email: admin@smartjob.com | password: Admin@123');
+            await Admin.create({ name: 'Super Admin', email: 'admin@smartjob.com', password: 'SmartJob#2026@Secure!', role: 'Super Admin', status: 'Active' });
+            console.log('[ADMIN] Default admin created → email: admin@smartjob.com | password: SmartJob#2026@Secure!');
         }
     } catch (error) {
         console.error('[ADMIN] Failed to create default admin:', error.message);
