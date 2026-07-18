@@ -1,8 +1,9 @@
 const serverless = require('serverless-http');
-const app = require('../../server'); // The exported express app
+const app = require('../../server');
 const connectDB = require('../../db/connection');
 
 let dbInitialized = false;
+const serverlessHandler = serverless(app);
 
 // Wrapper to ensure DB is initialized before handling any requests
 const handler = async (event, context) => {
@@ -11,7 +12,6 @@ const handler = async (event, context) => {
     await connectDB();
     dbInitialized = true;
   }
-  const serverlessHandler = serverless(app, { basePath: '/.netlify/functions' });
   return serverlessHandler(event, context);
 };
 

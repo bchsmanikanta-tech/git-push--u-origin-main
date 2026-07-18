@@ -117,7 +117,7 @@
 
             <div class="text-center mt-3">
                 <small class="text-muted">
-                    Default: <code>admin@smartjob.com</code> / <code>Admin@123</code>
+                    Email: <code>admin@smartjob.com</code>
                 </small>
             </div>
         </div>
@@ -159,9 +159,8 @@
 
                 try {
                     const hostname = window.location.hostname;
-                    const base = window.location.protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1'
-                        ? 'http://localhost:5000'
-                        : '';
+                    const isLocal = window.location.protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1';
+                    const base = isLocal ? 'http://localhost:5000' : '';
 
                     const res = await fetch(`${base}/api/admin/auth/login`, {
                         method: 'POST',
