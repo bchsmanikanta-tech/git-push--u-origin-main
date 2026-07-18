@@ -617,7 +617,8 @@ app.post('/api/admin/auth/login', async (req, res) => {
         const token = generateAdminToken(admin);
         res.json({ success: true, message: 'Admin login successful!', admin: { name: admin.name, email: admin.email, role: admin.role }, token });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Server error.' });
+        console.error('[ADMIN LOGIN ERROR]', error.message);
+        res.status(500).json({ success: false, message: 'Database error: ' + error.message });
     }
 });
 
@@ -866,8 +867,17 @@ app.post('/api/admin/users/bulk-email', adminAuth, async (req, res) => {
    STATUS CHECK
    ================================================================ */
 
-app.get('/api/status', (req, res) => {
-    res.json({ success: true, message: 'Smart Job Vacancy Finder API is online!', database: 'MongoDB Atlas' });
+app.get('/api/status', async (req, res) => {
+    const mongoose = require('mongoose');
+    const dbState = mongoose.connection.readyState;
+    const states = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
+    res.json({
+        success: true,
+        message: 'Smart Job Vacancy Finder API is online!',
+        database: 'MongoDB Atlas',
+        dbStatus: states[dbState] || 'unknown',
+        env: process.env.NETLIFY ? 'netlify' : 'local'
+    });
 });
 
 /* ================================================================
