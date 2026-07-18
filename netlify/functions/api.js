@@ -1,6 +1,6 @@
 const serverless = require('serverless-http');
 const app = require('../../server'); // The exported express app
-const { initDatabase } = require('../../db/pool');
+const connectDB = require('../../db/connection');
 
 let dbInitialized = false;
 
@@ -8,7 +8,7 @@ let dbInitialized = false;
 const handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
   if (!dbInitialized) {
-    await initDatabase();
+    await connectDB();
     dbInitialized = true;
   }
   const serverlessHandler = serverless(app, { basePath: '/.netlify/functions' });

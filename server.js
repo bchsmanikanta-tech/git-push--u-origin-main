@@ -1,54 +1,38 @@
-// Force Google DNS to ensure MongoDB Atlas SRV record resolves on any network
+// Force Google DNS to ensure MongoDB Atlas SRV record resolves on restricted networks
 const dns = require('dns');
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+try {
+    dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch (e) {
+    console.warn('[SERVER] Warning: Failed to set DNS servers:', e.message);
+}
 
 require('dotenv').config();
 
-const express = require('express');
-const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const multer = require('multer');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
+const express    = require('express');
+const cors       = require('cors');
+const path       = require('path');
+const fs         = require('fs');
+const multer     = require('multer');
+const helmet     = require('helmet');
+const morgan     = require('morgan');
+const rateLimit  = require('express-rate-limit');
+const jwt        = require('jsonwebtoken');
 
-// Admin-module route imports
-const adminModuleAuthRoutes = require('./admin-module/server/routes/authRoutes');
-const adminModuleUserRoutes = require('./admin-module/server/routes/userRoutes');
-const adminModuleVacancyRoutes = require('./admin-module/server/routes/vacancyRoutes');
-const adminModuleSmartDoorRoutes = require('./admin-module/server/routes/smartDoorRoutes');
-const adminModuleAnalyticsRoutes = require('./admin-module/server/routes/analyticsRoutes');
+const connectDB  = require('./db/connection');
+const { Jobseeker, Company, Job, Application, Admin, Notification } = require('./db/models');
 
-// PostgreSQL data-access layer
-const db = require('./db/queries');
-const { initDatabase, testConnection } = require('./db/pool');
-
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 5000;
 
-// Security & logging middleware
-app.use(helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-    crossOriginResourcePolicy: false,
-    crossOriginOpenerPolicy: false
-}));
+// ─── Middleware ───────────────────────────────────────────────────────────────
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false, crossOriginResourcePolicy: false, crossOriginOpenerPolicy: false }));
 app.use(morgan('dev'));
 
-// Enable CORS for Netlify frontend and local development
 const corsOptions = {
     origin: function (origin, callback) {
         if (!origin || origin === 'null') return callback(null, true);
-        // Allow localhost for local dev
-        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-            return callback(null, true);
-        }
-        // Allow Netlify domains (e.g., https://your-app.netlify.app)
-        if (origin.includes('.netlify.app') || origin.includes('netlify.app')) {
-            return callback(null, true);
-        }
-        // You can add your custom domain here if you have one
+        if (origin.includes('localhost') || origin.includes('127.0.0.1')) return callback(null, true);
+        if (origin.includes('.netlify.app') || origin.includes('netlify.app'))  return callback(null, true);
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true
@@ -57,172 +41,192 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ limit: '15mb', extended: true }));
 
-// Paths
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-
-// Ensure uploads folder exists
-try {
-    if (!fs.existsSync(UPLOADS_DIR)) {
-        fs.mkdirSync(UPLOADS_DIR);
+// ─── Map Mongoose _id to id in JSON Responses ────────────────────────────────
+const mapId = (obj) => {
+    if (!obj) return obj;
+    if (Array.isArray(obj)) {
+        return obj.map(mapId);
     }
-} catch (error) {
-    console.warn('[SERVER] Warning: Could not create uploads directory (filesystem is read-only):', error.message);
-}
+    if (typeof obj === 'object') {
+        if (obj._id && obj.id === undefined) {
+            obj.id = obj._id.toString();
+        }
+        for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key) && obj[key] && typeof obj[key] === 'object') {
+                obj[key] = mapId(obj[key]);
+            }
+        }
+    }
+    return obj;
+};
 
-// Multer setup for memory storage (Netlify compatible)
-const storage = multer.memoryStorage();
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit (ideal for serverless)
+app.use((req, res, next) => {
+    const originalJson = res.json;
+    res.json = function (body) {
+        if (body && typeof body === 'object') {
+            body = mapId(body);
+        }
+        return originalJson.call(this, body);
+    };
+    next();
 });
 
-// Serve uploaded files statically
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, message: 'Too many requests, try again later.' });
+app.use('/api/', limiter);
+
+// ─── Uploads ─────────────────────────────────────────────────────────────────
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) { try { fs.mkdirSync(UPLOADS_DIR); } catch (e) {} }
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-// Serve main frontend statically from the root
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+// ─── Static Frontend ──────────────────────────────────────────────────────────
 app.use(express.static(__dirname));
 
-/* --- API ENDPOINTS --- */
+/* ================================================================
+   HELPER — Admin JWT middleware
+   ================================================================ */
+const adminAuth = async (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, message: 'Admin authentication required.' });
+    }
+    try {
+        const token   = authHeader.split(' ')[1];
+        const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+        const admin   = await Admin.findOne({ email: decoded.email.toLowerCase() });
+        if (!admin) return res.status(403).json({ success: false, message: 'Invalid admin token.' });
+        req.admin = admin;
+        next();
+    } catch (err) {
+        return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
+    }
+};
 
-// --- Authentication APIs ---
+const generateAdminToken = (admin) =>
+    Buffer.from(JSON.stringify({ email: admin.email, role: admin.role, ts: Date.now() })).toString('base64');
 
-// Job Seeker Register
+/* ================================================================
+   AUTH — JOB SEEKER
+   ================================================================ */
+
+// Register Seeker
 app.post('/api/auth/register-seeker', async (req, res) => {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-        return res.status(400).json({ success: false, message: "Please fill all required fields." });
-    }
-
+    if (!name || !email || !password)
+        return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     try {
-        const existing = await db.getJobseekerByEmail(email);
-        if (existing) {
-            return res.status(400).json({ success: false, message: "Email already registered." });
-        }
-
-        const newSeeker = await db.createJobseeker({ name, email: email.toLowerCase(), password });
-        res.status(201).json({ success: true, message: "Registration successful!", user: { name, email: email.toLowerCase(), role: 'seeker' } });
+        const existing = await Jobseeker.findOne({ email: email.toLowerCase() });
+        if (existing) return res.status(400).json({ success: false, message: 'Email already registered.' });
+        await Jobseeker.create({ name, email: email.toLowerCase(), password });
+        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: email.toLowerCase(), role: 'seeker' } });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Job Seeker Login
+// Login Seeker
 app.post('/api/auth/login-seeker', async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) {
-        return res.status(400).json({ success: false, message: "Please enter email and password." });
-    }
-
+    if (!email || !password)
+        return res.status(400).json({ success: false, message: 'Please enter email and password.' });
     try {
-        const seeker = await db.getJobseekerByEmail(email);
-        if (!seeker || seeker.password !== password) {
-            return res.status(401).json({ success: false, message: "Invalid email or password." });
-        }
-
-        if (seeker.status === 'banned' || seeker.status === 'suspended') {
-            return res.status(403).json({ success: false, message: "Your account has been " + seeker.status + " by the administrator." });
-        }
-
-        res.json({ success: true, message: "Login successful!", user: { name: seeker.name, email: seeker.email, role: 'seeker' } });
+        const seeker = await Jobseeker.findOne({ email: email.toLowerCase() });
+        if (!seeker || seeker.password !== password)
+            return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+        if (seeker.status === 'banned' || seeker.status === 'suspended')
+            return res.status(403).json({ success: false, message: `Your account has been ${seeker.status} by the administrator.` });
+        res.json({ success: true, message: 'Login successful!', user: { name: seeker.name, email: seeker.email, role: 'seeker' } });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Company Register
+/* ================================================================
+   AUTH — COMPANY
+   ================================================================ */
+
+// Register Company
 app.post('/api/auth/register-company', async (req, res) => {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-        return res.status(400).json({ success: false, message: "Please fill all required fields." });
-    }
-
+    if (!name || !email || !password)
+        return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     try {
-        const existing = await db.getCompanyByEmail(email);
-        if (existing) {
-            return res.status(400).json({ success: false, message: "Company email already registered." });
-        }
-
-        await db.createCompany({ name, email: email.toLowerCase(), password });
-        res.status(201).json({ success: true, message: "Registration successful!", user: { name, email: email.toLowerCase(), role: 'company' } });
+        const existing = await Company.findOne({ email: email.toLowerCase() });
+        if (existing) return res.status(400).json({ success: false, message: 'Company email already registered.' });
+        await Company.create({ name, email: email.toLowerCase(), password });
+        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: email.toLowerCase(), role: 'company' } });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Company Login
+// Login Company
 app.post('/api/auth/login-company', async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) {
-        return res.status(400).json({ success: false, message: "Please enter email and password." });
-    }
-
+    if (!email || !password)
+        return res.status(400).json({ success: false, message: 'Please enter email and password.' });
     try {
-        const company = await db.getCompanyByEmail(email);
-        if (!company || company.password !== password) {
-            return res.status(401).json({ success: false, message: "Invalid email or password." });
-        }
-
-        if (company.status === 'banned' || company.status === 'suspended') {
-            return res.status(403).json({ success: false, message: "Your account has been " + company.status + " by the administrator." });
-        }
-
-        res.json({ success: true, message: "Login successful!", user: { name: company.name, email: company.email, role: 'company' } });
+        const company = await Company.findOne({ email: email.toLowerCase() });
+        if (!company || company.password !== password)
+            return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+        if (company.status === 'banned' || company.status === 'suspended')
+            return res.status(403).json({ success: false, message: `Your account has been ${company.status} by the administrator.` });
+        res.json({ success: true, message: 'Login successful!', user: { name: company.name, email: company.email, role: 'company' } });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
+/* ================================================================
+   PROFILES
+   ================================================================ */
 
-// --- Profile APIs ---
-
-// Get Job Seeker Profile
+// Get Seeker Profile
 app.get('/api/profile/seeker/:email', async (req, res) => {
-    const email = req.params.email.toLowerCase();
     try {
-        const seeker = await db.getJobseekerByEmail(email);
-        if (!seeker) {
-            return res.status(404).json({ success: false, message: "Job seeker not found." });
-        }
+        const seeker = await Jobseeker.findOne({ email: req.params.email.toLowerCase() }).lean();
+        if (!seeker) return res.status(404).json({ success: false, message: 'Job seeker not found.' });
         const { password, ...profile } = seeker;
         res.json({ success: true, profile });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Update Job Seeker Profile
+// Update Seeker Profile
 app.put('/api/profile/seeker/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
     const { name, qualification, skills, photo } = req.body;
-
     try {
-        const updated = await db.updateJobseeker(email, { name, qualification, skills, photo });
-        if (!updated) {
-            return res.status(404).json({ success: false, message: "Job seeker not found." });
-        }
+        const updated = await Jobseeker.findOneAndUpdate(
+            { email },
+            { ...(name && { name }), ...(qualification !== undefined && { qualification }), ...(skills !== undefined && { skills }), ...(photo !== undefined && { photo }) },
+            { new: true, lean: true }
+        );
+        if (!updated) return res.status(404).json({ success: false, message: 'Job seeker not found.' });
         const { password, ...profile } = updated;
-        res.json({ success: true, message: "Profile updated successfully!", profile });
+        res.json({ success: true, message: 'Profile updated successfully!', profile });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
 // Get Company Profile
 app.get('/api/profile/company/:email', async (req, res) => {
-    const email = req.params.email.toLowerCase();
     try {
-        const company = await db.getCompanyByEmail(email);
-        if (!company) {
-            return res.status(404).json({ success: false, message: "Company not found." });
-        }
+        const company = await Company.findOne({ email: req.params.email.toLowerCase() }).lean();
+        if (!company) return res.status(404).json({ success: false, message: 'Company not found.' });
         const { password, ...profile } = company;
         res.json({ success: true, profile });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
@@ -230,577 +234,458 @@ app.get('/api/profile/company/:email', async (req, res) => {
 app.put('/api/profile/company/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
     const { name, phone, location, industry, about } = req.body;
-
     try {
-        const updated = await db.updateCompany(email, { name, phone, location, industry, about });
-        if (!updated) {
-            return res.status(404).json({ success: false, message: "Company not found." });
-        }
+        const updated = await Company.findOneAndUpdate(
+            { email },
+            { ...(name && { name }), ...(phone !== undefined && { phone }), ...(location !== undefined && { location }), ...(industry !== undefined && { industry }), ...(about !== undefined && { about }) },
+            { new: true, lean: true }
+        );
+        if (!updated) return res.status(404).json({ success: false, message: 'Company not found.' });
 
-        // Update companyName in active job postings
+        // Sync company name on all their jobs
         if (name) {
-            const jobs = await db.listJobs();
-            for (const job of jobs) {
-                if (job.companyEmail === email && job.companyName !== name) {
-                    await db.updateJob(job.id, { companyName: name });
-                }
-            }
+            await Job.updateMany({ companyEmail: email, companyName: { $ne: name } }, { companyName: name });
         }
 
         const { password, ...profile } = updated;
-        res.json({ success: true, message: "Company profile updated successfully!", profile });
+        res.json({ success: true, message: 'Company profile updated successfully!', profile });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Upload Resume API with custom error handling
+// Upload Resume
 app.post('/api/profile/upload-resume', (req, res, next) => {
     upload.single('resume')(req, res, (err) => {
         if (err) {
-            if (err instanceof multer.MulterError) {
-                if (err.code === 'LIMIT_FILE_SIZE') {
-                    return res.status(400).json({ success: false, message: "File size limit exceeded. Max limit is 10MB." });
-                }
-                return res.status(400).json({ success: false, message: err.message });
-            }
-            return res.status(500).json({ success: false, message: err.message || "An error occurred during upload." });
+            if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: 'File too large. Max 10MB.' });
+            return res.status(400).json({ success: false, message: err.message });
         }
         next();
     });
 }, async (req, res) => {
     const { email } = req.body;
-    if (!email) {
-        return res.status(400).json({ success: false, message: "Job seeker email is required." });
-    }
-    if (!req.file) {
-        return res.status(400).json({ success: false, message: "No file uploaded." });
-    }
-
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required.' });
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
     try {
-        const base64Data = req.file.buffer.toString('base64');
-        const resumeDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
-
-        const updated = await db.updateJobseeker(email.toLowerCase(), { resume: resumeDataUrl });
-        if (!updated) {
-            return res.status(404).json({ success: false, message: "Job seeker not found." });
-        }
-
-        res.json({
-            success: true,
-            message: "Resume uploaded successfully!",
-            filename: req.file.originalname,
-            url: resumeDataUrl
-        });
+        const resumeDataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        const updated = await Jobseeker.findOneAndUpdate({ email: email.toLowerCase() }, { resume: resumeDataUrl }, { new: true });
+        if (!updated) return res.status(404).json({ success: false, message: 'Job seeker not found.' });
+        res.json({ success: true, message: 'Resume uploaded successfully!', filename: req.file.originalname, url: resumeDataUrl });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Upload Certificate API
+// Upload Certificate
 app.post('/api/profile/upload-certificate', (req, res, next) => {
     upload.single('certificate')(req, res, (err) => {
         if (err) {
-            if (err instanceof multer.MulterError) {
-                if (err.code === 'LIMIT_FILE_SIZE') {
-                    return res.status(400).json({ success: false, message: "File size limit exceeded. Max limit is 10MB." });
-                }
-                return res.status(400).json({ success: false, message: err.message });
-            }
-            return res.status(500).json({ success: false, message: err.message || "An error occurred during upload." });
+            if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ success: false, message: 'File too large. Max 10MB.' });
+            return res.status(400).json({ success: false, message: err.message });
         }
         next();
     });
 }, async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ success: false, message: "No file uploaded." });
-    }
-
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowed.includes(req.file.mimetype))
+        return res.status(400).json({ success: false, message: 'Invalid file format. Allowed: PDF, JPG, PNG.' });
     try {
-        const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-        if (!allowedMimeTypes.includes(req.file.mimetype)) {
-            return res.status(400).json({ success: false, message: "Invalid file format. Allowed formats: PDF, JPG, PNG, JPEG." });
-        }
-
-        const base64Data = req.file.buffer.toString('base64');
-        const certDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
-
-        res.json({
-            success: true,
-            message: "Certificate uploaded successfully!",
-            filename: req.file.originalname,
-            url: certDataUrl
-        });
+        const certDataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        res.json({ success: true, message: 'Certificate uploaded successfully!', filename: req.file.originalname, url: certDataUrl });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// --- Jobs APIs ---
+/* ================================================================
+   JOBS
+   ================================================================ */
 
-// Get All Active Jobs (Supports filtering and pagination)
+// Get All Jobs (with filter + pagination)
 app.get('/api/jobs', async (req, res) => {
     const { title, location, type, experience, minSalary, page, limit, companyEmail } = req.query;
     try {
         const filter = {};
-        
         if (companyEmail) {
-            filter.company_email = companyEmail.toLowerCase();
+            filter.companyEmail = companyEmail.toLowerCase();
         } else {
-            filter.status = "Active";
+            filter.status = 'Active';
         }
-
         if (title) {
-            const titleQuery = title.trim();
+            const t = title.trim();
             filter.$or = [
-                { title: new RegExp(titleQuery, 'i') },
-                { company_name: new RegExp(titleQuery, 'i') },
-                { skills: new RegExp(titleQuery, 'i') }
+                { title: new RegExp(t, 'i') },
+                { companyName: new RegExp(t, 'i') },
+                { skills: new RegExp(t, 'i') }
             ];
         }
+        if (location)   filter.location   = new RegExp(location.trim(), 'i');
+        if (type && type !== 'All')             filter.type       = new RegExp(`^${type.trim()}$`, 'i');
+        if (experience && experience !== 'All') filter.experience = new RegExp(experience.trim(), 'i');
 
-        if (location) {
-            filter.location = new RegExp(location.trim(), 'i');
-        }
-
-        if (type && type !== 'All') {
-            filter.type = new RegExp('^' + type.trim() + '$', 'i');
-        }
-
-        if (experience && experience !== 'All') {
-            filter.experience = new RegExp(experience.trim(), 'i');
-        }
-
-        let filteredJobs = await db.listJobs(filter);
+        let jobs = await Job.find(filter).sort({ createdAt: -1 }).lean();
 
         if (minSalary) {
             const minSalVal = parseInt(minSalary, 10) || 0;
             if (minSalVal > 0) {
-                filteredJobs = filteredJobs.filter(job => {
-                    const cleanSalaryStr = (job.salary || '').replace(/[^0-9]/g, '');
-                    const jobSal = cleanSalaryStr ? parseInt(cleanSalaryStr, 10) : 0;
-                    return jobSal === 0 || jobSal >= minSalVal;
+                jobs = jobs.filter(job => {
+                    const sal = parseInt((job.salary || '').replace(/[^0-9]/g, ''), 10) || 0;
+                    return sal === 0 || sal >= minSalVal;
                 });
             }
         }
 
-        // Pagination
-        const total = filteredJobs.length;
-        let paginatedJobs = filteredJobs;
-        let pageVal = 1;
-        let totalPages = 1;
+        const total      = jobs.length;
+        let pageVal      = 1;
+        let totalPages   = 1;
+        let paginatedJobs = jobs;
 
         if (page) {
-            pageVal = parseInt(page, 10) || 1;
+            pageVal       = parseInt(page, 10) || 1;
             const limitVal = parseInt(limit, 10) || 6;
-            totalPages = Math.ceil(total / limitVal);
-            const startIndex = (pageVal - 1) * limitVal;
-            paginatedJobs = filteredJobs.slice(startIndex, startIndex + limitVal);
+            totalPages    = Math.ceil(total / limitVal);
+            paginatedJobs = jobs.slice((pageVal - 1) * limitVal, pageVal * limitVal);
         }
 
-        res.json({
-            success: true,
-            jobs: paginatedJobs,
-            total,
-            page: pageVal,
-            totalPages
-        });
+        res.json({ success: true, jobs: paginatedJobs, total, page: pageVal, totalPages });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Get Specific Job Details
+// Get Single Job
 app.get('/api/jobs/:id', async (req, res) => {
     try {
-        const job = await db.getJobById(req.params.id);
-        if (!job) {
-            return res.status(404).json({ success: false, message: "Job not found." });
-        }
+        const job = await Job.findById(req.params.id).lean();
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         res.json({ success: true, job });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Post New Job (Company only)
+// Post Job
 app.post('/api/jobs', async (req, res) => {
     const { title, companyEmail, companyName, location, salary, type, skills, description, experience } = req.body;
-    if (!title || !companyEmail || !companyName || !location || !salary || !type || !description) {
-        return res.status(400).json({ success: false, message: "Please fill all required fields." });
-    }
-
+    if (!title || !companyEmail || !companyName || !location || !salary || !type || !description)
+        return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     try {
-        const newJob = await db.createJob({
-            id: 'job_' + Date.now(),
-            title,
-            companyEmail: companyEmail.toLowerCase(),
-            companyName,
-            location,
-            salary,
-            type,
-            skills: skills || "",
+        const jobId  = 'job_' + Date.now();
+        const newJob = await Job.create({
+            _id: jobId, title,
+            companyEmail: companyEmail.toLowerCase(), companyName,
+            location, salary, type,
+            skills: skills || '',
             description,
-            experience: experience || "Fresher",
-            status: "Active",
+            experience: experience || 'Fresher',
+            status: 'Active',
             createdAt: new Date().toISOString()
         });
 
-        // Trigger recommendation notifications for matching seekers
+        // Skill-match notifications
         try {
-            const seekers = await db.listJobseekers();
+            const seekers   = await Jobseeker.find().lean();
             const jobSkills = (skills || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-            
             for (const seeker of seekers) {
-                const seekerSkillsList = (seeker.skills || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-                const hasMatch = jobSkills.some(skill => seekerSkillsList.includes(skill));
-                if (hasMatch) {
-                    await db.createNotification({
+                const seekerSkills = (seeker.skills || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+                if (jobSkills.some(sk => seekerSkills.includes(sk))) {
+                    await Notification.create({
                         recipientEmail: seeker.email,
-                        title: "New Job Match Recommendation",
-                        message: `${companyName} just posted a new vacancy: ${title} which matches your profile skills!`
+                        title: 'New Job Match!',
+                        message: `${companyName} posted a new job: "${title}" that matches your skills!`
                     });
-                    console.log(`[EMAIL SIMULATION] To Seeker (${seeker.email}): Skill matching recommendation alert for new opening: ${title} at ${companyName}.`);
                 }
             }
-        } catch (notiError) {
-            console.error("Failed to trigger job posting notifications:", notiError);
-        }
+        } catch (nErr) { console.error('Notification error:', nErr.message); }
 
-        res.status(201).json({ success: true, message: "Job posted successfully!", job: newJob });
+        res.status(201).json({ success: true, message: 'Job posted successfully!', job: newJob });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Edit Job
+// Update Job
 app.put('/api/jobs/:id', async (req, res) => {
     const { title, location, salary, type, skills, description, experience, status } = req.body;
     try {
-        const updated = await db.updateJob(req.params.id, {
-            title, location, salary, type, skills, description, experience, status
-        });
-
-        if (!updated) {
-            return res.status(404).json({ success: false, message: "Job vacancy not found." });
-        }
-
-        res.json({ success: true, message: "Job details updated successfully!", job: updated });
+        const updated = await Job.findByIdAndUpdate(
+            req.params.id,
+            { ...(title && { title }), ...(location !== undefined && { location }), ...(salary !== undefined && { salary }), ...(type && { type }), ...(skills !== undefined && { skills }), ...(description !== undefined && { description }), ...(experience && { experience }), ...(status && { status }) },
+            { new: true, lean: true }
+        );
+        if (!updated) return res.status(404).json({ success: false, message: 'Job not found.' });
+        res.json({ success: true, message: 'Job updated successfully!', job: updated });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
 // Delete Job
 app.delete('/api/jobs/:id', async (req, res) => {
-    const jobId = req.params.id;
     try {
-        const removed = await db.deleteJob(jobId);
-        if (!removed) {
-            return res.status(404).json({ success: false, message: "Job vacancy not found." });
-        }
-        res.json({ success: true, message: "Job vacancy deleted successfully." });
+        const removed = await Job.findByIdAndDelete(req.params.id);
+        if (!removed) return res.status(404).json({ success: false, message: 'Job not found.' });
+        res.json({ success: true, message: 'Job deleted successfully.' });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
+/* ================================================================
+   APPLICATIONS
+   ================================================================ */
 
-// --- Applications APIs ---
-
-// Submit Job Application (Job Seeker only)
+// Submit Application
 app.post('/api/applications', async (req, res) => {
     const { jobId, jobTitle, companyEmail, companyName, seekerEmail, seekerName, coverLetter, resume, cgpa, certification, address, city, state } = req.body;
-
-    if (!jobId || !jobTitle || !companyEmail || !seekerEmail || !seekerName) {
-        return res.status(400).json({ success: false, message: "Invalid application details." });
-    }
-
+    if (!jobId || !jobTitle || !companyEmail || !seekerEmail || !seekerName)
+        return res.status(400).json({ success: false, message: 'Invalid application details.' });
     try {
-        const alreadyApplied = await db.applicationExists(jobId, seekerEmail);
-        if (alreadyApplied) {
-            return res.status(400).json({ success: false, message: "You have already applied for this job." });
-        }
+        const already = await Application.findOne({ jobId, seekerEmail: seekerEmail.toLowerCase() });
+        if (already) return res.status(400).json({ success: false, message: 'You have already applied for this job.' });
 
-        // Get current seeker's default resume if not overridden in form
         let finalResume = resume;
         if (!finalResume) {
-            const seeker = await db.getJobseekerByEmail(seekerEmail);
-            if (seeker && seeker.resume) {
-                finalResume = seeker.resume;
-            }
+            const seeker = await Jobseeker.findOne({ email: seekerEmail.toLowerCase() }).lean();
+            if (seeker && seeker.resume) finalResume = seeker.resume;
         }
 
-        const newApp = await db.createApplication({
-            id: 'app_' + Date.now(),
-            jobId,
-            jobTitle,
-            companyEmail: companyEmail.toLowerCase(),
-            companyName,
-            seekerEmail: seekerEmail.toLowerCase(),
-            seekerName,
+        const appId  = 'app_' + Date.now();
+        const newApp = await Application.create({
+            _id: appId, jobId, jobTitle,
+            companyEmail: companyEmail.toLowerCase(), companyName,
+            seekerEmail: seekerEmail.toLowerCase(), seekerName,
             appliedDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
-            resume: finalResume || "",
-            coverLetter: coverLetter || "",
-            status: "Pending",
-            cgpa: cgpa || "",
-            certification: certification || "",
-            address: address || "",
-            city: city || "",
-            state: state || ""
+            resume: finalResume || '', coverLetter: coverLetter || '',
+            status: 'Pending',
+            cgpa: cgpa || '', certification: certification || '',
+            address: address || '', city: city || '', state: state || ''
         });
 
-        // Trigger notifications
+        // Notifications
         try {
-            await db.createNotification({
-                recipientEmail: seekerEmail,
-                title: "Application Submitted",
-                message: `Your application for ${jobTitle} at ${companyName || 'the employer'} has been submitted.`
-            });
-            await db.createNotification({
-                recipientEmail: companyEmail,
-                title: "New Application Received",
-                message: `${seekerName} applied for your opening: ${jobTitle}.`
-            });
-            console.log(`[EMAIL SIMULATION] To Seeker (${seekerEmail}): Application submitted successfully for ${jobTitle}.`);
-            console.log(`[EMAIL SIMULATION] To Employer (${companyEmail}): New application received from ${seekerName} for ${jobTitle}.`);
-        } catch (notiError) {
-            console.error("Failed to trigger application notifications:", notiError);
-        }
+            await Notification.create({ recipientEmail: seekerEmail.toLowerCase(), title: 'Application Submitted', message: `Your application for "${jobTitle}" at ${companyName} has been submitted.` });
+            await Notification.create({ recipientEmail: companyEmail.toLowerCase(), title: 'New Application Received', message: `${seekerName} applied for your opening: "${jobTitle}".` });
+        } catch (nErr) { console.error('Notification error:', nErr.message); }
 
-        res.status(201).json({ success: true, message: "Application submitted successfully!", application: newApp });
+        res.status(201).json({ success: true, message: 'Application submitted successfully!', application: newApp });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Get Applications for a Seeker
+// Applications by Seeker
 app.get('/api/applications/seeker/:email', async (req, res) => {
-    const email = req.params.email.toLowerCase();
     try {
-        const seekerApps = await db.getApplicationsBySeeker(email);
-        res.json({ success: true, applications: seekerApps });
+        const apps = await Application.find({ seekerEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
+        res.json({ success: true, applications: apps });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Get Applications for a Company
+// Applications by Company
 app.get('/api/applications/company/:email', async (req, res) => {
-    const email = req.params.email.toLowerCase();
     try {
-        const companyApps = await db.getApplicationsByCompany(email);
-        res.json({ success: true, applications: companyApps });
+        const apps = await Application.find({ companyEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
+        res.json({ success: true, applications: apps });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Get Application Details (Including heavy base64 resume/cover letter)
+// Get Single Application
 app.get('/api/applications/:id', async (req, res) => {
     try {
-        const appRow = await db.getApplicationById(req.params.id);
-        if (!appRow) {
-            return res.status(404).json({ success: false, message: "Application not found." });
-        }
-        res.json({ success: true, application: appRow });
+        const app = await Application.findById(req.params.id).lean();
+        if (!app) return res.status(404).json({ success: false, message: 'Application not found.' });
+        res.json({ success: true, application: app });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// Update Application Status (Accept / Reject)
+// Update Application Status
 app.patch('/api/applications/:id/status', async (req, res) => {
     const { status } = req.body;
-    if (!status || !['Pending', 'Selected', 'Rejected'].includes(status)) {
-        return res.status(400).json({ success: false, message: "Invalid application status." });
-    }
-
+    if (!status || !['Pending', 'Selected', 'Rejected'].includes(status))
+        return res.status(400).json({ success: false, message: 'Invalid status.' });
     try {
-        const updated = await db.setApplicationStatus(req.params.id, status);
-        if (!updated) {
-            return res.status(404).json({ success: false, message: "Application not found." });
-        }
+        const updated = await Application.findByIdAndUpdate(req.params.id, { status }, { new: true, lean: true });
+        if (!updated) return res.status(404).json({ success: false, message: 'Application not found.' });
 
-        // Trigger notifications
         try {
-            await db.createNotification({
+            await Notification.create({
                 recipientEmail: updated.seekerEmail,
                 title: `Application ${status === 'Selected' ? 'Accepted' : 'Evaluated'}`,
-                message: `Your application for ${updated.jobTitle} at ${updated.companyName || 'the employer'} has been marked as ${status}.`
+                message: `Your application for "${updated.jobTitle}" has been marked as ${status}.`
             });
-            console.log(`[EMAIL SIMULATION] To Seeker (${updated.seekerEmail}): Your application for ${updated.jobTitle} has been marked as ${status}.`);
-        } catch (notiError) {
-            console.error("Failed to trigger status update notification:", notiError);
-        }
+        } catch (nErr) { console.error('Notification error:', nErr.message); }
 
-        res.json({ success: true, message: `Application state updated to ${status}.`, application: updated });
+        res.json({ success: true, message: `Application status updated to ${status}.`, application: updated });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// System Status Endpoint
-app.get('/api/status', (req, res) => {
-    res.json({ success: true, message: "Smart Job Vacancy Finder API is online!" });
-});
+/* ================================================================
+   NOTIFICATIONS
+   ================================================================ */
 
-
-/* ============================================================ */
-/* --- ADMIN API ENDPOINTS ---                                  */
-/* ============================================================ */
-
-// Simple token generation (for demo purposes)
-function generateAdminToken(admin) {
-    return Buffer.from(JSON.stringify({ email: admin.email, role: admin.role, ts: Date.now() })).toString('base64');
-}
-
-// Simple admin auth middleware
-async function adminAuth(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ success: false, message: 'Admin authentication required.' });
-    }
+app.get('/api/notifications/:email', async (req, res) => {
     try {
-        const token = authHeader.split(' ')[1];
-        const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
-        const admin = await db.getAdminByEmail(decoded.email);
-        if (!admin) {
-            return res.status(403).json({ success: false, message: 'Invalid admin token.' });
-        }
-        req.admin = admin;
-        next();
-    } catch (err) {
-        return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
+        const list = await Notification.find({ recipientEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
+        res.json({ success: true, notifications: list });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
-}
+});
 
-// 1. Admin Login
+app.put('/api/notifications/:id/read', async (req, res) => {
+    try {
+        const updated = await Notification.findByIdAndUpdate(req.params.id, { isRead: true }, { new: true, lean: true });
+        res.json({ success: true, notification: updated });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error.' });
+    }
+});
+
+/* ================================================================
+   SAVED JOBS
+   ================================================================ */
+
+app.get('/api/saved-jobs/:email', async (req, res) => {
+    try {
+        const seeker = await Jobseeker.findOne({ email: req.params.email.toLowerCase() }).lean();
+        if (!seeker) return res.json({ success: true, jobs: [] });
+        const jobs = await Job.find({ _id: { $in: seeker.savedJobs || [] } }).lean();
+        res.json({ success: true, jobs });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error.' });
+    }
+});
+
+app.post('/api/saved-jobs', async (req, res) => {
+    const { email, jobId } = req.body;
+    if (!email || !jobId) return res.status(400).json({ success: false, message: 'Email and Job ID are required.' });
+    try {
+        const updated = await Jobseeker.findOneAndUpdate(
+            { email: email.toLowerCase() },
+            { $addToSet: { savedJobs: jobId } },
+            { new: true, lean: true }
+        );
+        res.json({ success: true, message: 'Job bookmarked!', user: updated });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error.' });
+    }
+});
+
+app.delete('/api/saved-jobs', async (req, res) => {
+    const { email, jobId } = req.body;
+    if (!email || !jobId) return res.status(400).json({ success: false, message: 'Email and Job ID are required.' });
+    try {
+        const updated = await Jobseeker.findOneAndUpdate(
+            { email: email.toLowerCase() },
+            { $pull: { savedJobs: jobId } },
+            { new: true, lean: true }
+        );
+        res.json({ success: true, message: 'Bookmark removed!', user: updated });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error.' });
+    }
+});
+
+/* ================================================================
+   ADMIN AUTH
+   ================================================================ */
+
 app.post('/api/admin/auth/login', async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) {
+    if (!email || !password)
         return res.status(400).json({ success: false, message: 'Please enter email and password.' });
-    }
-
     try {
-        const admin = await db.getAdminByEmail(email);
-        if (!admin || admin.password !== password) {
+        const admin = await Admin.findOne({ email: email.toLowerCase() }).lean();
+        if (!admin || admin.password !== password)
             return res.status(401).json({ success: false, message: 'Invalid admin credentials.' });
-        }
-
         const token = generateAdminToken(admin);
-        res.json({
-            success: true,
-            message: 'Admin login successful!',
-            admin: { name: admin.name, email: admin.email, role: admin.role },
-            token
-        });
+        res.json({ success: true, message: 'Admin login successful!', admin: { name: admin.name, email: admin.email, role: admin.role }, token });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 2. Dashboard Stats
+/* ================================================================
+   ADMIN — DASHBOARD STATS
+   ================================================================ */
+
 app.get('/api/admin/dashboard/stats', adminAuth, async (req, res) => {
     try {
         const [jobs, seekers, companies, applications] = await Promise.all([
-            db.listJobs(),
-            db.listJobseekers(),
-            db.listCompanies(),
-            db.listApplications()
+            Job.find().lean(),
+            Jobseeker.find().lean(),
+            Company.find().lean(),
+            Application.find().lean()
         ]);
 
-        const totalJobs = jobs.length;
-        const activeJobs = jobs.filter(j => j.status === 'Active').length;
-        const totalSeekers = seekers.length;
-        const totalCompanies = companies.length;
-        const totalApplications = applications.length;
-        const pendingApplications = applications.filter(a => a.status === 'Pending').length;
+        const totalJobs            = jobs.length;
+        const activeJobs           = jobs.filter(j => j.status === 'Active').length;
+        const totalSeekers         = seekers.length;
+        const totalCompanies       = companies.length;
+        const totalApplications    = applications.length;
+        const pendingApplications  = applications.filter(a => a.status === 'Pending').length;
         const selectedApplications = applications.filter(a => a.status === 'Selected').length;
         const rejectedApplications = applications.filter(a => a.status === 'Rejected').length;
 
         // Jobs by day (last 7 days)
         const jobsByDay = [];
         for (let i = 6; i >= 0; i--) {
-            const d = new Date();
+            const d        = new Date();
             d.setDate(d.getDate() - i);
-            const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+            const dateStr  = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
             const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            const dayEnd = new Date(dayStart.getTime() + 86400000);
-            const count = jobs.filter(j => {
-                const created = new Date(j.createdAt);
-                return created >= dayStart && created < dayEnd;
-            }).length;
+            const dayEnd   = new Date(dayStart.getTime() + 86400000);
+            const count    = jobs.filter(j => { const c = new Date(j.createdAt); return c >= dayStart && c < dayEnd; }).length;
             jobsByDay.push({ date: dateStr, count });
         }
 
-        // Recent activity feed
+        // Recent activity
         const recentActivity = [];
-
-        const sortedJobs = [...jobs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3);
-        sortedJobs.forEach(j => {
-            recentActivity.push({
-                type: 'job',
-                text: `"${j.title}" posted by ${j.companyName}`,
-                time: j.createdAt ? new Date(j.createdAt).toLocaleDateString('en-IN') : 'Recently'
-            });
-        });
-
-        const sortedApps = [...applications].sort((a, b) => {
-            const parseDate = (d) => { const p = d.split('-'); return new Date(p[2], p[1] - 1, p[0]); };
-            return parseDate(b.appliedDate) - parseDate(a.appliedDate);
-        }).slice(0, 3);
-        sortedApps.forEach(a => {
-            recentActivity.push({
-                type: 'application',
-                text: `${a.seekerName} applied for "${a.jobTitle}"`,
-                time: a.appliedDate
-            });
-        });
-
+        [...jobs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3).forEach(j =>
+            recentActivity.push({ type: 'job', text: `"${j.title}" posted by ${j.companyName}`, time: j.createdAt ? new Date(j.createdAt).toLocaleDateString('en-IN') : 'Recently' })
+        );
+        [...applications].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3).forEach(a =>
+            recentActivity.push({ type: 'application', text: `${a.seekerName} applied for "${a.jobTitle}"`, time: a.appliedDate })
+        );
         if (seekers.length > 0) {
-            const latestSeeker = seekers[seekers.length - 1];
-            recentActivity.push({
-                type: 'user',
-                text: `New job seeker registered: ${latestSeeker.name}`,
-                time: 'Recently'
-            });
+            const last = seekers[seekers.length - 1];
+            recentActivity.push({ type: 'user', text: `New seeker registered: ${last.name}`, time: 'Recently' });
         }
 
-        res.json({
-            success: true,
-            stats: {
-                totalJobs,
-                activeJobs,
-                totalSeekers,
-                totalCompanies,
-                totalApplications,
-                pendingApplications,
-                selectedApplications,
-                rejectedApplications,
-                jobsByDay,
-                recentActivity
-            }
-        });
+        res.json({ success: true, stats: { totalJobs, activeJobs, totalSeekers, totalCompanies, totalApplications, pendingApplications, selectedApplications, rejectedApplications, jobsByDay, recentActivity } });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 3. Analytics Export Summary
+/* ================================================================
+   ADMIN — ANALYTICS EXPORT
+   ================================================================ */
+
 app.get('/api/admin/analytics/export-summary', adminAuth, async (req, res) => {
     try {
         const [jobs, seekers, companies, applications] = await Promise.all([
-            db.listJobs(),
-            db.listJobseekers(),
-            db.listCompanies(),
-            db.listApplications()
+            Job.find().lean(), Jobseeker.find().lean(), Company.find().lean(), Application.find().lean()
         ]);
-
-        const headers = ['Metric', 'Value'];
         const rows = [
+            ['Metric', 'Value'],
             ['Total Jobs', jobs.length],
             ['Active Jobs', jobs.filter(j => j.status === 'Active').length],
             ['Total Job Seekers', seekers.length],
@@ -811,341 +696,226 @@ app.get('/api/admin/analytics/export-summary', adminAuth, async (req, res) => {
             ['Rejected Applications', applications.filter(a => a.status === 'Rejected').length],
             ['Report Generated', new Date().toLocaleString('en-IN')]
         ];
-
-        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const csv = rows.map(r => r.join(',')).join('\n');
         res.json({ success: true, csv });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 4. Admin – Get All Jobs
+/* ================================================================
+   ADMIN — JOBS MANAGEMENT
+   ================================================================ */
+
 app.get('/api/admin/jobs', adminAuth, async (req, res) => {
     try {
-        const jobs = await db.listJobs();
+        const jobs = await Job.find().sort({ createdAt: -1 }).lean();
         res.json({ success: true, jobs });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 5. Admin – Update Job Status
 app.patch('/api/admin/jobs/:id/status', adminAuth, async (req, res) => {
     const { status } = req.body;
-    if (!status) {
-        return res.status(400).json({ success: false, message: 'Status is required.' });
-    }
-
+    if (!status) return res.status(400).json({ success: false, message: 'Status is required.' });
     try {
-        const updated = await db.setJobStatus(req.params.id, status);
-        if (!updated) {
-            return res.status(404).json({ success: false, message: 'Job not found.' });
-        }
+        const updated = await Job.findByIdAndUpdate(req.params.id, { status }, { new: true, lean: true });
+        if (!updated) return res.status(404).json({ success: false, message: 'Job not found.' });
         res.json({ success: true, message: `Job status updated to ${status}.`, job: updated });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 6. Admin – Toggle Featured
 app.patch('/api/admin/jobs/:id/featured', adminAuth, async (req, res) => {
     try {
-        const updated = await db.toggleJobFeatured(req.params.id);
-        if (!updated) {
-            return res.status(404).json({ success: false, message: 'Job not found.' });
-        }
-        const state = updated.featured ? 'marked as Featured' : 'removed from Featured';
-        res.json({ success: true, message: `Job ${state}.`, job: updated });
+        const job = await Job.findById(req.params.id);
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
+        job.featured = !job.featured;
+        await job.save();
+        res.json({ success: true, message: `Job ${job.featured ? 'marked as Featured' : 'removed from Featured'}.`, job });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 7. Admin – Delete Job
-app.delete('/api/admin/jobs/:id', adminAuth, async (req, res) => {
-    try {
-        const removed = await db.deleteJob(req.params.id);
-        if (!removed) {
-            return res.status(404).json({ success: false, message: 'Job not found.' });
-        }
-        res.json({ success: true, message: 'Job deleted successfully.' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
-    }
-});
-
-// 8. Admin – Edit Job
 app.put('/api/admin/jobs/:id', adminAuth, async (req, res) => {
     const { title, location, salary, type, skills, description, experience, status } = req.body;
     try {
-        const updated = await db.updateJob(req.params.id, {
-            title, location, salary, type, skills, description, experience, status
-        });
-        if (!updated) {
-            return res.status(404).json({ success: false, message: 'Job not found.' });
-        }
-        res.json({ success: true, message: 'Job updated successfully!', job: updated });
+        const updated = await Job.findByIdAndUpdate(
+            req.params.id,
+            { ...(title && { title }), ...(location !== undefined && { location }), ...(salary !== undefined && { salary }), ...(type && { type }), ...(skills !== undefined && { skills }), ...(description !== undefined && { description }), ...(experience && { experience }), ...(status && { status }) },
+            { new: true, lean: true }
+        );
+        if (!updated) return res.status(404).json({ success: false, message: 'Job not found.' });
+        res.json({ success: true, message: 'Job updated!', job: updated });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 9. Admin – Bulk Job Actions
+app.delete('/api/admin/jobs/:id', adminAuth, async (req, res) => {
+    try {
+        const removed = await Job.findByIdAndDelete(req.params.id);
+        if (!removed) return res.status(404).json({ success: false, message: 'Job not found.' });
+        res.json({ success: true, message: 'Job deleted.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error.' });
+    }
+});
+
 app.post('/api/admin/jobs/bulk', adminAuth, async (req, res) => {
     const { action, ids } = req.body;
-    if (!action || !ids || !ids.length) {
+    if (!action || !ids || !ids.length)
         return res.status(400).json({ success: false, message: 'Action and job IDs are required.' });
-    }
-
     try {
         let count = 0;
         for (const id of ids) {
-            let updated = null;
             if (action === 'delete') {
-                if (await db.deleteJob(id)) count++;
+                const r = await Job.findByIdAndDelete(id);
+                if (r) count++;
             } else if (action === 'activate' || action === 'Active') {
-                updated = await db.setJobStatus(id, 'Active');
+                const r = await Job.findByIdAndUpdate(id, { status: 'Active' });
+                if (r) count++;
             } else if (action === 'archive' || action === 'Archived') {
-                updated = await db.setJobStatus(id, 'Archived');
+                const r = await Job.findByIdAndUpdate(id, { status: 'Archived' });
+                if (r) count++;
             } else if (action === 'feature') {
-                updated = await db.updateJob(id, { featured: true });
+                const r = await Job.findByIdAndUpdate(id, { featured: true });
+                if (r) count++;
             } else if (action === 'unfeature') {
-                updated = await db.updateJob(id, { featured: false });
+                const r = await Job.findByIdAndUpdate(id, { featured: false });
+                if (r) count++;
             }
-            if (updated) count++;
         }
-
         res.json({ success: true, message: `Bulk action "${action}" applied to ${count} job(s).` });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 10. Admin – Get All Users (seekers + companies merged)
+/* ================================================================
+   ADMIN — USERS MANAGEMENT
+   ================================================================ */
+
 app.get('/api/admin/users', adminAuth, async (req, res) => {
     try {
         const [seekers, companies, applications, jobs] = await Promise.all([
-            db.listJobseekers(),
-            db.listCompanies(),
-            db.listApplications(),
-            db.listJobs()
+            Jobseeker.find().lean(), Company.find().lean(), Application.find().lean(), Job.find().lean()
         ]);
 
-        const seekerUsers = seekers.map(s => {
-            const appCount = applications.filter(a => a.seekerEmail === s.email).length;
-            return {
-                name: s.name,
-                email: s.email,
-                role: 'seeker',
-                qualification: s.qualification || '',
-                skills: s.skills || '',
-                location: '',
-                status: s.status || 'active',
-                applicationCount: appCount
-            };
-        });
-
-        const companyUsers = companies.map(c => {
-            const jobCount = jobs.filter(j => j.companyEmail === c.email).length;
-            return {
-                name: c.name,
-                email: c.email,
-                role: 'company',
-                industry: c.industry || '',
-                location: c.location || '',
-                about: c.about || '',
-                status: c.status || 'active',
-                jobsPosted: jobCount
-            };
-        });
+        const seekerUsers  = seekers.map(s => ({
+            name: s.name, email: s.email, role: 'seeker',
+            qualification: s.qualification || '', skills: s.skills || '',
+            status: s.status || 'active',
+            applicationCount: applications.filter(a => a.seekerEmail === s.email).length
+        }));
+        const companyUsers = companies.map(c => ({
+            name: c.name, email: c.email, role: 'company',
+            industry: c.industry || '', location: c.location || '',
+            status: c.status || 'active',
+            jobsPosted: jobs.filter(j => j.companyEmail === c.email).length
+        }));
 
         res.json({ success: true, users: [...seekerUsers, ...companyUsers] });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 11. Admin – Update User Status (ban / suspend / reactivate)
 app.patch('/api/admin/users/status', adminAuth, async (req, res) => {
     const { email, role, status } = req.body;
-    if (!email || !role || !status) {
+    if (!email || !role || !status)
         return res.status(400).json({ success: false, message: 'Email, role, and status are required.' });
-    }
-
     try {
         let updated = null;
         if (role === 'seeker') {
-            updated = await db.setJobseekerStatus(email, status);
+            updated = await Jobseeker.findOneAndUpdate({ email: email.toLowerCase() }, { status }, { new: true });
         } else if (role === 'company') {
-            updated = await db.setCompanyStatus(email, status);
+            updated = await Company.findOneAndUpdate({ email: email.toLowerCase() }, { status }, { new: true });
         } else {
             return res.status(400).json({ success: false, message: 'Invalid role.' });
         }
-
-        if (!updated) {
-            return res.status(404).json({ success: false, message: 'User not found.' });
-        }
-
-        const actionWord = status === 'active' ? 'reactivated' : status === 'banned' ? 'banned' : 'suspended';
-        res.json({ success: true, message: `User "${email}" has been ${actionWord}.` });
+        if (!updated) return res.status(404).json({ success: false, message: 'User not found.' });
+        const word = status === 'active' ? 'reactivated' : status === 'banned' ? 'banned' : 'suspended';
+        res.json({ success: true, message: `User "${email}" has been ${word}.` });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// 12. Admin – Bulk Email (simulated, logs to console)
 app.post('/api/admin/users/bulk-email', adminAuth, async (req, res) => {
     const { segment, subject, body } = req.body;
-    if (!subject || !body) {
-        return res.status(400).json({ success: false, message: 'Subject and message body are required.' });
-    }
-
+    if (!subject || !body)
+        return res.status(400).json({ success: false, message: 'Subject and body are required.' });
     try {
-        const [seekers, companies] = await Promise.all([db.listJobseekers(), db.listCompanies()]);
+        const [seekers, companies] = await Promise.all([Jobseeker.find().lean(), Company.find().lean()]);
         let recipients = [];
-
-        if (segment === 'all' || !segment) {
-            recipients = [...seekers.map(s => s.email), ...companies.map(c => c.email)];
-        } else if (segment === 'seekers') {
-            recipients = seekers.map(s => s.email);
-        } else if (segment === 'companies') {
-            recipients = companies.map(c => c.email);
-        }
-
-        console.log(`[ADMIN BULK EMAIL] Subject: "${subject}" | To: ${recipients.length} recipients (${segment || 'all'})`);
-        console.log(`[ADMIN BULK EMAIL] Body: ${body.substring(0, 100)}...`);
-
-        res.json({
-            success: true,
-            message: `Email "${subject}" sent to ${recipients.length} ${segment || 'all'} user(s) successfully!`
-        });
+        if (!segment || segment === 'all') recipients = [...seekers.map(s => s.email), ...companies.map(c => c.email)];
+        else if (segment === 'seekers')    recipients = seekers.map(s => s.email);
+        else if (segment === 'companies')  recipients = companies.map(c => c.email);
+        console.log(`[ADMIN BULK EMAIL] Subject: "${subject}" | To: ${recipients.length} recipients`);
+        res.json({ success: true, message: `Email "${subject}" sent to ${recipients.length} user(s).` });
     } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
+        res.status(500).json({ success: false, message: 'Server error.' });
     }
 });
 
-// --- User Notifications APIs ---
+/* ================================================================
+   STATUS CHECK
+   ================================================================ */
 
-// Fetch user notifications
-app.get('/api/notifications/:email', async (req, res) => {
-    try {
-        const list = await db.listNotificationsByEmail(req.params.email);
-        res.json({ success: true, notifications: list });
-    } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
-    }
+app.get('/api/status', (req, res) => {
+    res.json({ success: true, message: 'Smart Job Vacancy Finder API is online!', database: 'MongoDB Atlas' });
 });
 
-// Mark notification as read
-app.put('/api/notifications/:id/read', async (req, res) => {
-    try {
-        const updated = await db.markNotificationAsRead(req.params.id);
-        res.json({ success: true, notification: updated });
-    } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
-    }
+/* ================================================================
+   FRONTEND FALLBACK
+   ================================================================ */
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- Saved Jobs APIs ---
+/* ================================================================
+   GLOBAL ERROR HANDLER
+   ================================================================ */
 
-// Fetch saved jobs
-app.get('/api/saved-jobs/:email', async (req, res) => {
-    try {
-        const list = await db.listSavedJobs(req.params.email);
-        res.json({ success: true, jobs: list });
-    } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
-    }
-});
-
-// Save a job
-app.post('/api/saved-jobs', async (req, res) => {
-    const { email, jobId } = req.body;
-    if (!email || !jobId) {
-        return res.status(400).json({ success: false, message: "Email and Job ID are required." });
-    }
-    try {
-        const updatedSeeker = await db.addSavedJob(email, jobId);
-        res.json({ success: true, message: "Job bookmarked successfully!", user: updatedSeeker });
-    } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
-    }
-});
-
-// Remove a saved job
-app.delete('/api/saved-jobs', async (req, res) => {
-    const { email, jobId } = req.body;
-    if (!email || !jobId) {
-        return res.status(400).json({ success: false, message: "Email and Job ID are required." });
-    }
-    try {
-        const updatedSeeker = await db.removeSavedJob(email, jobId);
-        res.json({ success: true, message: "Bookmark removed successfully!", user: updatedSeeker });
-    } catch (error) {
-        res.status(500).json({ success: false, message: "Server error." });
-    }
-});
-
-/* ============================================================ */
-/* --- ADMIN MODULE API ROUTES (merged from admin-module/server) */
-/* ============================================================ */
-
-// Rate limiting for admin-module routes
-const adminModuleLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,
-    message: 'Too many requests from this IP, please try again later.'
-});
-
-// Mount admin-module routes under /api prefix (same paths as before)
-app.use('/api/auth', adminModuleLimiter, adminModuleAuthRoutes);
-app.use('/api/users', adminModuleLimiter, adminModuleUserRoutes);
-app.use('/api/vacancies', adminModuleLimiter, adminModuleVacancyRoutes);
-app.use('/api/smart-doors', adminModuleLimiter, adminModuleSmartDoorRoutes);
-app.use('/api/analytics', adminModuleLimiter, adminModuleAnalyticsRoutes);
-
-// Global error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ success: false, message: 'Internal Server Error', error: err.message });
 });
 
-// Redirect any unmatched route to index.html (optional frontend fallback)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+/* ================================================================
+   STARTUP
+   ================================================================ */
 
-// Ensure default admin accounts exist
 const ensureDefaultAdmin = async () => {
     try {
-        await db.ensureDefaultAdmins();
-        console.log('[ADMIN] Ensured shared admin account credentials are current');
+        const exists = await Admin.findOne({ email: 'admin@smartjob.com' });
+        if (!exists) {
+            await Admin.create({ name: 'Super Admin', email: 'admin@smartjob.com', password: 'Admin@123', role: 'Super Admin', status: 'Active' });
+            console.log('[ADMIN] Default admin created → email: admin@smartjob.com | password: Admin@123');
+        }
     } catch (error) {
-        console.error('[ADMIN] Failed to ensure default admin account:', error.message);
+        console.error('[ADMIN] Failed to create default admin:', error.message);
     }
 };
 
-// Start unified server locally
 const startServer = async () => {
-    try {
-        await initDatabase();
-        await ensureDefaultAdmin();
-        app.listen(PORT, () => {
-            console.log(`==================================================`);
-            console.log(` UNIFIED SERVER RUNNING: http://localhost:${PORT}`);
-            console.log(` DATABASE: MongoDB`);
-            console.log(`==================================================`);
-        });
-    } catch (error) {
-        console.error('[SERVER] Initialization failed:', error.message);
-    }
+    await connectDB();
+    await ensureDefaultAdmin();
+    app.listen(PORT, () => {
+        console.log('==================================================');
+        console.log(` SERVER RUNNING  → http://localhost:${PORT}`);
+        console.log(` DATABASE        → MongoDB Atlas`);
+        console.log('==================================================');
+    });
 };
 
-// If not running in Netlify environment, start the server locally
 if (!process.env.NETLIFY) {
     startServer();
 }
 
-// Export the express app for serverless function use
 module.exports = app;
-

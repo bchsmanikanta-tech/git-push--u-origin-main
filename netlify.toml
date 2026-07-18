@@ -1,18 +1,8 @@
 [build]
-  publish = "."
-  command = "npm install"
+  framework = "static"
   functions = "netlify/functions"
+  publish = "."
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-  force = true
-
-[[headers]]
-  for = "/*"
-    [headers.values]
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
+[dev]
+  command = "npm run netlify"
+  targetPort = 8888

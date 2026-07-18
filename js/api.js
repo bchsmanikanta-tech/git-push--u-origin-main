@@ -527,6 +527,7 @@ const Theme = {
         // Apply correct icon state on inject
         this._updateIcon(this.get());
     },
+};
 
 // ============================================================
 // 🔔 NOTIFICATIONS MANAGER — In-App live dropdowns
