@@ -108,6 +108,10 @@
             const tableWrapper = document.getElementById('table-wrapper');
             const noAppsBox = document.getElementById('no-applicants');
 
+            // Read jobId from URL query params if filtering by specific job
+            const urlParams = new URLSearchParams(window.location.search);
+            const filterJobId = urlParams.get('jobId') || '';
+
             // Resume store — maps app ID to Base64 data URL
             const resumeStore = {};
             // Certificate store — maps app ID to Base64 data URL
@@ -145,7 +149,7 @@
                 noAppsBox.classList.add('d-none');
 
                 try {
-                    const data = await API.applications.getForCompany(user.email);
+                    const data = await API.applications.getForCompany(user.email, filterJobId);
                     companyApps = data.applications;
 
                     spinner.classList.add('d-none');

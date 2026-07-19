@@ -154,6 +154,16 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Notifications Section -->
+                <div class="premium-card mt-5 p-4" id="notifications-section">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h3 class="fw-bold mb-0"><i class="bi bi-bell-fill text-warning me-2"></i>Recent Notifications</h3>
+                    </div>
+                    <div id="notifications-list">
+                        <p class="text-secondary text-center py-3">Loading notifications...</p>
+                    </div>
+                </div>
             </main>
             
         </div>
@@ -422,6 +432,38 @@
                         }
                     }
                 });
+
+                // Load and render notifications
+                async function loadDashboardNotifications() {
+                    try {
+                        const res = await API.notifications.list(user.email);
+                        const notifications = res.notifications || [];
+                        const container = document.getElementById('notifications-list');
+                        if (!container) return;
+
+                        if (notifications.length === 0) {
+                            container.innerHTML = '<p class="text-secondary text-center py-3"><i class="bi bi-bell-slash me-2"></i>No notifications yet</p>';
+                            return;
+                        }
+
+                        const recent = notifications.slice(0, 5);
+                        container.innerHTML = recent.map(n => `
+                            <div class="d-flex align-items-start gap-3 p-3 border-bottom ${n.isRead ? 'opacity-75' : 'fw-semibold'}" style="border-color: var(--border-color) !important;">
+                                <div class="rounded-circle p-2 ${n.isRead ? 'bg-secondary' : 'bg-warning'} bg-opacity-10" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="bi ${n.isRead ? 'bi-bell' : 'bi-bell-fill'} ${n.isRead ? 'text-secondary' : 'text-warning'}"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <p class="mb-0 small" style="color: var(--text-primary);">${n.message}</p>
+                                    <span class="x-small text-muted">${n.createdAt ? new Date(n.createdAt).toLocaleDateString() : 'Recently'}</span>
+                                </div>
+                                ${!n.isRead ? '<span class="badge bg-warning rounded-circle p-1 mt-1" style="width: 8px; height: 8px;"></span>' : ''}
+                            </div>
+                        `).join('');
+                    } catch (err) {
+                        console.error("Failed to load notifications:", err);
+                    }
+                }
+                loadDashboardNotifications();
 
             } catch (err) {
                 console.error("Dashboard error:", err);

@@ -502,7 +502,9 @@ app.get('/api/applications/seeker/:email', async (req, res) => {
 // Applications by Company
 app.get('/api/applications/company/:email', async (req, res) => {
     try {
-        const apps = await Application.find({ companyEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
+        const filter = { companyEmail: req.params.email.toLowerCase() };
+        if (req.query.jobId) filter.jobId = req.query.jobId;
+        const apps = await Application.find(filter).sort({ createdAt: -1 }).lean();
         const appsWithId = apps.map(app => ({ ...app, id: app._id }));
         res.json({ success: true, applications: appsWithId });
     } catch (error) {

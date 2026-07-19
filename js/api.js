@@ -49,11 +49,14 @@ try {
             const user = { name: urlName, email: urlEmail, role: urlRole };
             SafeStorage.setItem('user', JSON.stringify(user));
             
-            // Clean up the URL query parameters only if localStorage is persistent
+            // Clean up only session params from URL, preserving other query params
             if (SafeStorage.isPersistent) {
                 try {
-                    const cleanUrl = window.location.pathname;
-                    window.history.replaceState({}, document.title, cleanUrl);
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('session_email');
+                    url.searchParams.delete('session_name');
+                    url.searchParams.delete('session_role');
+                    window.history.replaceState({}, document.title, url.pathname + url.search);
                 } catch (e) {}
             }
         }
@@ -355,8 +358,10 @@ const API = {
         async getForSeeker(email) {
             return apiRequest(`/applications/seeker/${email}`);
         },
-        async getForCompany(email) {
-            return apiRequest(`/applications/company/${email}`);
+        async getForCompany(email, jobId) {
+            let endpoint = `/applications/company/${email}`;
+            if (jobId) endpoint += `?jobId=${encodeURIComponent(jobId)}`;
+            return apiRequest(endpoint);
         },
         async updateStatus(id, status) {
             return apiRequest(`/applications/${id}/status`, {
@@ -540,8 +545,12 @@ const NotificationsManager = {
 
         if (document.querySelector('.notification-dropdown-wrapper')) return;
 
-        // Find navbar container
-        const navRight = document.querySelector('.navbar-custom .container > div') || document.querySelector('.navbar-custom .container');
+        // Find navbar container with multiple fallbacks
+        const navRight = document.querySelector('.navbar-custom .container > div') 
+            || document.querySelector('.navbar-custom .container')
+            || document.querySelector('.navbar .container > div')
+            || document.querySelector('.navbar .container')
+            || document.querySelector('nav .container');
         if (!navRight) return;
 
         const wrapper = document.createElement('div');
