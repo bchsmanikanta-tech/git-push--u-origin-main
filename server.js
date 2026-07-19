@@ -77,7 +77,11 @@ app.use('/api/', limiter);
 
 // ─── Uploads ─────────────────────────────────────────────────────────────────
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) { try { fs.mkdirSync(UPLOADS_DIR); } catch (e) {} }
+try {
+    if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+} catch (e) {
+    console.warn('[SERVER] Could not create uploads dir (read-only FS):', e.message);
+}
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -914,8 +918,8 @@ const ensureDefaultAdmin = async () => {
     try {
         const exists = await Admin.findOne({ email: 'admin@smartjob.com' });
         if (!exists) {
-            await Admin.create({ name: 'Super Admin', email: 'admin@smartjob.com', password: 'SmartJob#2026@Secure!', role: 'Super Admin', status: 'Active' });
-            console.log('[ADMIN] Default admin created → email: admin@smartjob.com | password: SmartJob#2026@Secure!');
+            await Admin.create({ name: 'Super Admin', email: 'admin@smartjob.com', password: 'Admin@123', role: 'Super Admin', status: 'Active' });
+            console.log('[ADMIN] Default admin created → email: admin@smartjob.com | password: Admin@123');
         }
     } catch (error) {
         console.error('[ADMIN] Failed to create default admin:', error.message);

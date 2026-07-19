@@ -10,6 +10,16 @@ const handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
   if (!dbInitialized) {
     await connectDB();
+    const { Admin } = require('../../db/models');
+    const exists = await Admin.findOne({ email: 'admin@smartjob.com' });
+    if (!exists) {
+      await Admin.create({ name: 'Super Admin', email: 'admin@smartjob.com', password: 'Admin@123', role: 'Super Admin', status: 'Active' });
+      console.log('[ADMIN] Default admin created → admin@smartjob.com / Admin@123');
+    } else if (exists.password !== 'Admin@123') {
+      exists.password = 'Admin@123';
+      await exists.save();
+      console.log('[ADMIN] Default admin password reset → Admin@123');
+    }
     dbInitialized = true;
   }
   return serverlessHandler(event, context);
