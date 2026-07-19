@@ -474,7 +474,10 @@ app.post('/api/applications', async (req, res) => {
             await Notification.create({ recipientEmail: companyEmail.toLowerCase(), title: 'New Application Received', message: `${seekerName} applied for your opening: "${jobTitle}".` });
         } catch (nErr) { console.error('Notification error:', nErr.message); }
 
-        res.status(201).json({ success: true, message: 'Application submitted successfully!', application: newApp });
+        const applicationWithId = newApp.toObject();
+        applicationWithId.id = applicationWithId._id;
+
+        res.status(201).json({ success: true, message: 'Application submitted successfully!', application: applicationWithId });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Server error.' });
@@ -485,7 +488,8 @@ app.post('/api/applications', async (req, res) => {
 app.get('/api/applications/seeker/:email', async (req, res) => {
     try {
         const apps = await Application.find({ seekerEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
-        res.json({ success: true, applications: apps });
+        const appsWithId = apps.map(app => ({ ...app, id: app._id }));
+        res.json({ success: true, applications: appsWithId });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
     }
@@ -495,7 +499,8 @@ app.get('/api/applications/seeker/:email', async (req, res) => {
 app.get('/api/applications/company/:email', async (req, res) => {
     try {
         const apps = await Application.find({ companyEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
-        res.json({ success: true, applications: apps });
+        const appsWithId = apps.map(app => ({ ...app, id: app._id }));
+        res.json({ success: true, applications: appsWithId });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
     }
@@ -504,9 +509,10 @@ app.get('/api/applications/company/:email', async (req, res) => {
 // Get Single Application
 app.get('/api/applications/:id', async (req, res) => {
     try {
-        const app = await Application.findById(req.params.id).lean();
-        if (!app) return res.status(404).json({ success: false, message: 'Application not found.' });
-        res.json({ success: true, application: app });
+        const appObj = await Application.findById(req.params.id).lean();
+        if (!appObj) return res.status(404).json({ success: false, message: 'Application not found.' });
+        appObj.id = appObj._id;
+        res.json({ success: true, application: appObj });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
     }
@@ -529,7 +535,8 @@ app.patch('/api/applications/:id/status', async (req, res) => {
             });
         } catch (nErr) { console.error('Notification error:', nErr.message); }
 
-        res.json({ success: true, message: `Application status updated to ${status}.`, application: updated });
+        const updatedWithId = { ...updated, id: updated._id };
+        res.json({ success: true, message: `Application status updated to ${status}.`, application: updatedWithId });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
     }
@@ -542,7 +549,8 @@ app.patch('/api/applications/:id/status', async (req, res) => {
 app.get('/api/notifications/:email', async (req, res) => {
     try {
         const list = await Notification.find({ recipientEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
-        res.json({ success: true, notifications: list });
+        const listWithId = list.map(n => ({ ...n, id: n._id.toString() }));
+        res.json({ success: true, notifications: listWithId });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
     }
@@ -551,7 +559,8 @@ app.get('/api/notifications/:email', async (req, res) => {
 app.put('/api/notifications/:id/read', async (req, res) => {
     try {
         const updated = await Notification.findByIdAndUpdate(req.params.id, { isRead: true }, { new: true, lean: true });
-        res.json({ success: true, notification: updated });
+        const updatedWithId = { ...updated, id: updated._id.toString() };
+        res.json({ success: true, notification: updatedWithId });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
     }

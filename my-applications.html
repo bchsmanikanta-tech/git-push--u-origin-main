@@ -122,12 +122,13 @@
 
                 // Reverse to show most recent first, build rows via DOM (not innerHTML +=)
                 [...apps].reverse().forEach(app => {
+                    const appId = app.id || app._id;
                     let badgeClass = 'badge-pending';
                     if (app.status === 'Selected') badgeClass = 'badge-selected';
                     if (app.status === 'Rejected') badgeClass = 'badge-rejected';
 
                     // Store resume data keyed by app ID
-                    if (app.resume) resumeStore[app.id] = app.resume;
+                    if (app.resume) resumeStore[appId] = app.resume;
 
                     const row = document.createElement('tr');
                     row.innerHTML = `
@@ -136,7 +137,7 @@
                         <td>${app.appliedDate}</td>
                         <td>
                             ${app.resume
-                                ? `<button class="btn btn-sm btn-outline-info rounded-pill px-3 view-resume-btn" data-app-id="${app.id}">
+                                ? `<button class="btn btn-sm btn-outline-info rounded-pill px-3 view-resume-btn" data-app-id="${appId}">
                                        <i class="bi bi-file-pdf"></i> View Resume
                                    </button>`
                                 : '<span class="text-secondary small">No file</span>'}

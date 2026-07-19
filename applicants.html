@@ -179,44 +179,48 @@
 
                     // Build rows via DOM (avoids innerHTML+= re-parse issues)
                     [...companyApps].reverse().forEach(app => {
+                        const appId = app.id || app._id;
                         let statusBadgeClass = 'badge-pending';
                         if (app.status === 'Selected') statusBadgeClass = 'badge-selected';
                         if (app.status === 'Rejected') statusBadgeClass = 'badge-rejected';
 
-                        if (app.resume) resumeStore[app.id] = app.resume;
-                        if (app.certification) certStore[app.id] = app.certification;
+                        if (app.resume) resumeStore[appId] = app.resume;
+                        if (app.certification) certStore[appId] = app.certification;
 
                         const letterBtnHtml = app.coverLetter
-                            ? `<button class="btn btn-sm btn-outline-secondary rounded-pill px-3 open-letter-btn" data-app-id="${app.id}"><i class="bi bi-chat-text"></i> Read Letter</button>`
+                            ? `<button class="btn btn-sm btn-outline-secondary rounded-pill px-3 open-letter-btn" data-app-id="${appId}"><i class="bi bi-chat-text"></i> Read Letter</button>`
                             : '<span class="text-secondary small">-</span>';
 
                         let actionControls = '';
                         if (app.status === 'Pending') {
                             actionControls = `
                                 <div class="d-flex justify-content-center gap-1">
-                                    <button class="btn btn-sm btn-success px-3 rounded-3 fw-semibold status-btn" data-app-id="${app.id}" data-status="Selected">Accept</button>
-                                    <button class="btn btn-sm btn-danger px-3 rounded-3 fw-semibold status-btn" data-app-id="${app.id}" data-status="Rejected">Reject</button>
+                                    <button class="btn btn-sm btn-success px-3 rounded-3 fw-semibold status-btn" data-app-id="${appId}" data-status="Selected">Accept</button>
+                                    <button class="btn btn-sm btn-danger px-3 rounded-3 fw-semibold status-btn" data-app-id="${appId}" data-status="Rejected">Reject</button>
                                 </div>`;
                         } else {
                             actionControls = `<span class="text-secondary small fw-medium">Evaluated</span>`;
                         }
 
+                        const cityState = [app.city, app.state].filter(Boolean).join(', ') || '-';
+
                         const row = document.createElement('tr');
-                        row.id = `app-row-${app.id}`;
+                        row.id = `app-row-${appId}`;
                         row.innerHTML = `
                             <td class="fw-bold text-slate-800">${app.seekerName}</td>
                             <td class="small text-secondary">${app.seekerEmail}</td>
                             <td class="fw-semibold">${app.jobTitle}</td>
+                            <td class="fw-medium text-slate-700">${cityState}</td>
                             <td class="fw-bold">${app.cgpa || '-'}</td>
                             <td>${letterBtnHtml}</td>
                             <td>${app.resume
-                                ? `<button class="btn btn-sm btn-outline-info rounded-pill px-3 view-resume-btn" data-app-id="${app.id}"><i class="bi bi-file-pdf"></i> View Resume</button>`
+                                ? `<button class="btn btn-sm btn-outline-info rounded-pill px-3 view-resume-btn" data-app-id="${appId}"><i class="bi bi-file-pdf"></i> View Resume</button>`
                                 : '<span class="text-secondary small">No resume</span>'}</td>
                             <td>${app.certification
-                                ? `<button class="btn btn-sm btn-outline-warning rounded-pill px-3 view-cert-btn" data-app-id="${app.id}"><i class="bi bi-patch-check"></i> View Cert</button>`
+                                ? `<button class="btn btn-sm btn-outline-warning rounded-pill px-3 view-cert-btn" data-app-id="${appId}"><i class="bi bi-patch-check"></i> View Cert</button>`
                                 : '<span class="text-secondary small">No cert</span>'}</td>
-                            <td><span class="badge-custom ${statusBadgeClass}" id="badge-${app.id}"><i class="bi bi-circle-fill" style="font-size:8px;"></i> ${app.status}</span></td>
-                            <td id="actions-${app.id}">${actionControls}</td>
+                            <td><span class="badge-custom ${statusBadgeClass}" id="badge-${appId}"><i class="bi bi-circle-fill" style="font-size:8px;"></i> ${app.status}</span></td>
+                            <td id="actions-${appId}">${actionControls}</td>
                         `;
                         tbody.appendChild(row);
                     });
@@ -247,7 +251,7 @@
 
             // Modal viewer for cover letters
             window.openLetterModal = function(appId) {
-                const app = companyApps.find(a => a.id === appId);
+                const app = companyApps.find(a => (a.id || a._id) === appId);
                 if (!app) return;
 
                 document.getElementById('letter-candidate').innerText = `${app.seekerName} (${app.seekerEmail})`;
@@ -287,7 +291,7 @@
                     }
 
                     // Update memory state
-                    const appObj = companyApps.find(a => a.id === appId);
+                    const appObj = companyApps.find(a => (a.id || a._id) === appId);
                     if (appObj) appObj.status = newStatus;
 
                 } catch (err) {

@@ -568,6 +568,32 @@ const NotificationsManager = {
             navRight.appendChild(wrapper);
         }
 
+        // Native Vanilla JS dropdown toggle (does not rely on bootstrap.bundle.min.js)
+        const bellBtn = wrapper.querySelector('#notifBellBtn');
+        const dropdownList = wrapper.querySelector('#notifDropdownList');
+
+        bellBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isShown = dropdownList.classList.contains('show');
+            document.querySelectorAll('.notification-dropdown-wrapper .dropdown-menu').forEach(el => {
+                if (el !== dropdownList) el.classList.remove('show');
+            });
+            if (isShown) {
+                dropdownList.classList.remove('show');
+                bellBtn.setAttribute('aria-expanded', 'false');
+            } else {
+                dropdownList.classList.add('show');
+                bellBtn.setAttribute('aria-expanded', 'true');
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) {
+                dropdownList.classList.remove('show');
+                bellBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+
         this.loadNotifications();
         setInterval(() => this.loadNotifications(), 15000);
     },
@@ -600,7 +626,7 @@ const NotificationsManager = {
             container.innerHTML = notifications.map(n => `
                 <li class="p-2 mb-1 rounded position-relative notif-item ${n.isRead ? 'opacity-75' : 'fw-semibold border-start border-primary border-3'}" 
                     style="cursor: pointer; transition: background 0.2s; background: ${n.isRead ? 'transparent' : 'rgba(79, 70, 229, 0.05)'}; list-style: none;" 
-                    data-id="${n.id}">
+                    data-id="${n.id || n._id}">
                     <div class="d-flex justify-content-between align-items-start">
                         <span class="small d-block text-wrap" style="max-width: 250px; font-size: 13px; color: var(--text-primary);">${n.message}</span>
                         ${!n.isRead ? `<span class="badge bg-primary rounded-circle p-1" style="width:6px; height:6px; margin-top: 4px;"> </span>` : ''}
@@ -612,7 +638,7 @@ const NotificationsManager = {
             container.querySelectorAll('.notif-item').forEach(item => {
                 item.addEventListener('click', async () => {
                     const notifId = item.dataset.id;
-                    const notifObj = notifications.find(n => n.id === notifId);
+                    const notifObj = notifications.find(n => (n.id || n._id) === notifId);
                     if (notifObj && !notifObj.isRead) {
                         try {
                             await API.notifications.markRead(notifId);
