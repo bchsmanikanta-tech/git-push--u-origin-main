@@ -877,20 +877,50 @@ app.post('/api/admin/users/bulk-email', adminAuth, async (req, res) => {
 });
 
 /* ================================================================
-   STATUS CHECK
+   DATABASE SERVER HEALTH & DIAGNOSTICS
    ================================================================ */
 
-app.get('/api/status', async (req, res) => {
-    const mongoose = require('mongoose');
-    const dbState = mongoose.connection.readyState;
-    const states = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
-    res.json({
-        success: true,
-        message: 'Smart Job Vacancy Finder API is online!',
-        database: 'MongoDB Atlas',
-        dbStatus: states[dbState] || 'unknown',
-        env: process.env.NETLIFY ? 'netlify' : 'local'
-    });
+app.get('/api/db-server', async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        const dbState = mongoose.connection.readyState;
+        const states = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
+
+        const startPing = Date.now();
+        if (mongoose.connection.db) {
+            await mongoose.connection.db.admin().ping();
+        }
+        const pingMs = Date.now() - startPing;
+
+        const [seekersCount, companiesCount, jobsCount, appsCount] = await Promise.all([
+            Jobseeker.countDocuments(),
+            Company.countDocuments(),
+            Job.countDocuments(),
+            Application.countDocuments()
+        ]);
+
+        res.json({
+            success: true,
+            databaseServer: {
+                provider: 'MongoDB Atlas Cloud Server',
+                host: mongoose.connection.host || 'smartjob.alq6c0s.mongodb.net',
+                name: mongoose.connection.name || 'smartjobfinder',
+                status: states[dbState] || 'connected',
+                pingMs: pingMs + 'ms',
+                collections: {
+                    jobseekers: seekersCount,
+                    companies: companiesCount,
+                    jobs: jobsCount,
+                    applications: appsCount
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Database server diagnostic error: ' + error.message
+        });
+    }
 });
 
 /* ================================================================

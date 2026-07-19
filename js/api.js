@@ -547,7 +547,7 @@ const NotificationsManager = {
         const wrapper = document.createElement('div');
         wrapper.className = 'notification-dropdown-wrapper d-inline-block me-3 position-relative';
         wrapper.innerHTML = `
-            <button class="btn btn-outline-primary rounded-circle position-relative p-2" id="notifBellBtn" data-bs-toggle="dropdown" aria-expanded="false" style="width:40px; height:40px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+            <button class="btn btn-outline-primary rounded-circle position-relative p-2" id="notifBellBtn" aria-expanded="false" style="width:40px; height:40px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
                 <i class="bi bi-bell-fill"></i>
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notifBadge" style="font-size: 9px; padding: 3px 6px;">0</span>
             </button>

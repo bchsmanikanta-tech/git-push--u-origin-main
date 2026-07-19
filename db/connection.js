@@ -8,9 +8,14 @@ try {
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
+    const mongoURI = process.env.MONGO_URI || 'mongodb+srv://bhaihack333_db_user:kRTnlwlPdikPS4m8@smartjob.alq6c0s.mongodb.net/smartjobfinder?retryWrites=true&w=majority&appName=smartjob';
     try {
-        const conn = await mongoose.connect(process.env.MONGO_URI);
+        const conn = await mongoose.connect(mongoURI, {
+            serverSelectionTimeoutMS: 8000,
+            connectTimeoutMS: 10000
+        });
         console.log(`[DB] MongoDB Connected: ${conn.connection.host}`);
+        return conn;
     } catch (error) {
         console.error(`[DB] MongoDB Connection Failed: ${error.message}`);
         if (!process.env.NETLIFY) {
