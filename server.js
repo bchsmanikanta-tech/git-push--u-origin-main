@@ -533,7 +533,7 @@ app.patch('/api/applications/:id/status', async (req, res) => {
 
         try {
             await Notification.create({
-                recipientEmail: updated.seekerEmail,
+                recipientEmail: updated.seekerEmail ? updated.seekerEmail.toLowerCase() : '',
                 title: `Application ${status === 'Selected' ? 'Accepted' : 'Evaluated'}`,
                 message: `Your application for "${updated.jobTitle}" has been marked as ${status}.`
             });

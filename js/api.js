@@ -602,8 +602,10 @@ const NotificationsManager = {
         const user = Session.getUser();
         if (!user || !user.email) return;
 
+        const email = user.email.trim().toLowerCase();
+
         try {
-            const res = await API.notifications.list(user.email);
+            const res = await API.notifications.list(email);
             const notifications = res.notifications || [];
             
             const badge = document.getElementById('notifBadge');
@@ -614,14 +616,22 @@ const NotificationsManager = {
             if (unreadCount > 0) {
                 badge.innerText = unreadCount;
                 badge.classList.remove('d-none');
+                badge.classList.add('notif-badge-pulse');
             } else {
                 badge.classList.add('d-none');
+                badge.classList.remove('notif-badge-pulse');
             }
 
             if (notifications.length === 0) {
                 container.innerHTML = `<li class="text-center py-3 text-secondary small" style="color: var(--text-muted) !important;">No notifications yet</li>`;
                 return;
             }
+
+            const formatTime = (dateVal) => {
+                if (!dateVal) return 'Recently';
+                const d = new Date(dateVal);
+                return isNaN(d.getTime()) ? 'Recently' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            };
 
             container.innerHTML = notifications.map(n => `
                 <li class="p-2 mb-1 rounded position-relative notif-item ${n.isRead ? 'opacity-75' : 'fw-semibold border-start border-primary border-3'}" 
@@ -631,7 +641,7 @@ const NotificationsManager = {
                         <span class="small d-block text-wrap" style="max-width: 250px; font-size: 13px; color: var(--text-primary);">${n.message}</span>
                         ${!n.isRead ? `<span class="badge bg-primary rounded-circle p-1" style="width:6px; height:6px; margin-top: 4px;"> </span>` : ''}
                     </div>
-                    <span class="x-small text-muted d-block mt-1" style="font-size: 10px; color: var(--text-muted) !important;">${new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    <span class="x-small text-muted d-block mt-1" style="font-size: 10px; color: var(--text-muted) !important;">${formatTime(n.createdAt)}</span>
                 </li>
             `).join('');
 
