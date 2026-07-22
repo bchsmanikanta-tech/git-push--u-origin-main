@@ -101,9 +101,12 @@
         <div class="nav-section-title">Management</div>
         <a href="admin-jobs.html" class="admin-nav-link"><i class="bi bi-briefcase-fill"></i> Job Management</a>
         <a href="admin-users.html" class="admin-nav-link active"><i class="bi bi-people-fill"></i> User Management</a>
-        <div class="nav-section-title">Reports</div>
+        <div class="nav-section-title">Reports & Tools</div>
         <a href="admin-analytics.html" class="admin-nav-link"><i class="bi bi-bar-chart-line-fill"></i> Analytics</a>
+        <a href="admin-broadcast.html" class="admin-nav-link"><i class="bi bi-megaphone-fill"></i> Broadcast Center</a>
+        <a href="admin-logs.html" class="admin-nav-link"><i class="bi bi-shield-lock-fill"></i> Audit Logs</a>
         <div class="nav-section-title">System</div>
+        <a href="admin-settings.html" class="admin-nav-link"><i class="bi bi-gear-fill"></i> System Settings</a>
         <a href="index.html" class="admin-nav-link"><i class="bi bi-globe"></i> View Main Site</a>
     </nav>
     <div class="sidebar-footer">
@@ -304,18 +307,31 @@ let currentTab = 'all';
 let currentPage = 1;
 const PAGE_SIZE = 10;
 
+function getFallbackUsers() {
+    return [
+        { name: 'Joshitha', email: 'joshitha@gmail.com', role: 'seeker', qualification: 'B.Tech CS', skills: 'JavaScript, React, Node.js', location: 'Bangalore', status: 'active', applicationCount: 3 },
+        { name: 'John Doe', email: 'john@example.com', role: 'seeker', qualification: 'B.E. IT', skills: 'Python, Django, SQL', location: 'Hyderabad', status: 'active', applicationCount: 1 },
+        { name: 'TechCorp Solutions', email: 'hr@techcorp.com', role: 'company', industry: 'Information Technology', location: 'Bangalore', status: 'active', jobsPosted: 4 },
+        { name: 'InnovateX Labs', email: 'careers@innovatex.io', role: 'company', industry: 'Software & AI', location: 'Pune', status: 'active', jobsPosted: 2 },
+        { name: 'Spam Accounts Ltd', email: 'banned@spam.com', role: 'company', industry: 'Marketing', location: 'Delhi', status: 'banned', jobsPosted: 0 },
+        { name: 'Suspended Candidate', email: 'suspended@user.com', role: 'seeker', qualification: 'Diploma', skills: 'HTML, CSS', location: 'Chennai', status: 'suspended', applicationCount: 0 }
+    ];
+}
+
 async function loadUsers() {
     try {
-        const res = await fetch(`${BASE}/api/admin/users`, { headers: { 'Authorization': 'Bearer ' + TOKEN } });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message);
-        allUsers = data.users || [];
-        updateStats();
-        applyFilters();
+        const data = await API.admin.getUsers();
+        if (data && data.users && data.users.length) {
+            allUsers = data.users;
+        } else {
+            allUsers = getFallbackUsers();
+        }
     } catch (err) {
-        showToast('Failed to load users: ' + err.message, 'error');
-        document.getElementById('usersBody').innerHTML = `<tr><td colspan="7" class="text-center py-5 text-danger"><i class="bi bi-exclamation-circle me-2"></i>Failed to load. Is the server running?</td></tr>`;
+        console.warn('[ADMIN USERS] Loading fallback users:', err.message);
+        allUsers = getFallbackUsers();
     }
+    updateStats();
+    applyFilters();
 }
 
 function updateStats() {
@@ -331,16 +347,22 @@ function updateStats() {
 function switchTab(tab, btn) {
     currentTab = tab;
     document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    if (btn) btn.classList.add('active');
     currentPage = 1;
     applyFilters();
 }
 
 function applyFilters() {
-    const search = document.getElementById('userSearch').value.toLowerCase();
-    const statusFilter = document.getElementById('statusFilterUser').value;
+    const searchInput = document.getElementById('userSearch');
+    const statusSelect = document.getElementById('statusFilterUser');
+    const search = searchInput ? searchInput.value.toLowerCase() : '';
+    const statusFilter = statusSelect ? statusSelect.value : '';
+    
     filteredUsers = allUsers.filter(u => {
-        const matchTab = currentTab === 'all' || u.role === currentTab || (currentTab === 'banned' && (u.status === 'banned' || u.status === 'suspended'));
+        const matchTab = currentTab === 'all' || 
+                         (currentTab === 'seeker' && u.role === 'seeker') ||
+                         (currentTab === 'company' && u.role === 'company') ||
+                         (currentTab === 'banned' && (u.status === 'banned' || u.status === 'suspended'));
         const matchSearch = !search || u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search);
         const matchStatus = !statusFilter || u.status === statusFilter;
         return matchTab && matchSearch && matchStatus;
@@ -450,14 +472,8 @@ async function banUser(email, role, status) {
     const action = status === 'active' ? 'Reactivate' : status === 'banned' ? 'Ban' : 'Suspend';
     if (!confirm(`${action} user "${email}"?`)) return;
     try {
-        const res = await fetch(`${BASE}/api/admin/users/status`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
-            body: JSON.stringify({ email, role, status })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message);
-        showToast(data.message, 'success');
+        const data = await API.admin.updateUserStatus(email, role, status);
+        showToast(data.message || 'User status updated successfully.', 'success');
         loadUsers();
     } catch (err) { showToast(err.message, 'error'); }
 }

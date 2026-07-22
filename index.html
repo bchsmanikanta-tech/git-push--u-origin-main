@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <script>!function(){try{var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}}();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Job Vacancy Finder</title>
-    
+    <title>Smart Job Vacancy Finder System – Find Your Dream Job</title>
+    <meta name="description" content="Smart Job Vacancy Finder System - Search jobs based on your skills and location. Connect with top employers today.">
+
     <!-- Bootstrap and Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
@@ -13,78 +14,514 @@
     <!-- Custom Style System -->
     <link rel="stylesheet" href="style.css">
     
+    <style>
+        .hero-banner {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #312e81 100%);
+            color: white;
+            padding: 80px 0 90px;
+            border-radius: 0 0 32px 32px;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -20%;
+            width: 140%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, transparent 60%);
+            pointer-events: none;
+        }
+        .search-box-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(16px);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            margin-top: -50px;
+            position: relative;
+            z-index: 10;
+        }
+        .job-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+            transition: all 0.25s ease;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .job-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+            border-color: rgba(124, 58, 237, 0.3);
+        }
+        .choice-card {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .choice-card:hover {
+            border-color: #4f46e5;
+            background: #f1f5f9;
+            transform: translateY(-2px);
+        }
+    </style>
+
     <script src="js/api.js" defer></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // Auto redirect if already logged in
-            const user = Session.getUser();
-            if (user) {
-                if (user.role === 'seeker') {
-                    Session.redirect('jobseeker-dashboard.html');
-                } else if (user.role === 'company') {
-                    Session.redirect('company-dashboard.html');
-                }
-            }
-        });
-    </script>
 </head>
+<body>
 
-<body class="bg-gradient-auth d-flex align-items-center justify-content-center min-vh-100 py-5">
+    <!-- 1. & 2. & 3. Navigation Bar -->
+    <nav class="navbar navbar-expand-lg sticky-top bg-white border-bottom shadow-sm py-2">
+        <div class="container">
+            <!-- 1. Logo -->
+            <a class="navbar-brand fw-bold fs-4 d-flex align-items-center gap-2" href="index.html">
+                <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#4f46e5);display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-briefcase-fill text-white fs-5"></i>
+                </div>
+                <span class="text-slate-900">Smart Job Vacancy Finder System</span>
+            </a>
 
-    <div class="container d-flex justify-content-center">
-        <div class="glass-card text-center p-5 animate-fade-in-up" style="max-width: 800px; width: 100%;">
-            
-            <div class="mb-4">
-                <div class="d-inline-flex align-items-center justify-content-center bg-gradient-header text-white rounded-circle shadow-lg" style="width: 100px; height: 100px;">
-                    <i class="bi bi-briefcase-fill" style="font-size: 50px;"></i>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <!-- 2. Navigation Links & 3. Login/Register Buttons -->
+            <div class="collapse navbar-collapse" id="mainNavbar">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4 gap-lg-1">
+                    <li class="nav-item"><a class="nav-link fw-semibold active text-primary" href="index.html">Home</a></li>
+                    <li class="nav-item"><a class="nav-link fw-semibold text-secondary" href="jobs.html">Jobs</a></li>
+                    <li class="nav-item"><a class="nav-link fw-semibold text-secondary" href="#companies">Companies</a></li>
+                    <li class="nav-item"><a class="nav-link fw-semibold text-secondary" href="#about">About</a></li>
+                    <li class="nav-item"><a class="nav-link fw-semibold text-secondary" href="#contact">Contact</a></li>
+                </ul>
+
+                <div class="d-flex align-items-center gap-2">
+                    <!-- 3. Login Dropdown & Modal Button -->
+                    <div class="dropdown">
+                        <button class="btn btn-outline-primary rounded-pill px-4 fw-semibold dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Login
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="border-radius:12px;">
+                            <li><a class="dropdown-item py-2 fw-medium" href="jobseeker-login.html"><i class="bi bi-person-fill text-primary me-2"></i>Job Seeker Login</a></li>
+                            <li><a class="dropdown-item py-2 fw-medium" href="company-login.html"><i class="bi bi-building text-success me-2"></i>Company Login</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item py-2 fw-medium text-danger" href="admin-login.html"><i class="bi bi-shield-lock-fill me-2"></i>Admin Portal</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- 3. Register Dropdown & Modal Button -->
+                    <div class="dropdown">
+                        <button class="btn btn-primary rounded-pill px-4 fw-semibold shadow-sm dropdown-toggle" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-plus-fill me-1"></i> Register
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="border-radius:12px;">
+                            <li><a class="dropdown-item py-2 fw-semibold text-primary" href="jobseeker-register.html"><i class="bi bi-person-workspace me-2"></i>Job Seeker Register</a></li>
+                            <li><a class="dropdown-item py-2 fw-semibold text-success" href="company-register.html"><i class="bi bi-building-add me-2"></i>Company Register</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-            
-            <h1 class="fw-bold tracking-tight text-slate-900 mb-2">Smart Job Vacancy Finder</h1>
-            <p class="text-secondary fs-5 mb-5">
-                Connecting talented candidates with leading companies seamlessly. Select your role to begin.
+        </div>
+    </nav>
+
+    <!-- 4. Welcome Banner (Hero Section) -->
+    <header class="hero-banner text-center">
+        <div class="container position-relative">
+            <span class="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill fw-semibold mb-3">
+                <i class="bi bi-stars me-1"></i> Next-Gen Career & Recruitment Portal
+            </span>
+            <h1 class="display-4 fw-extrabold tracking-tight mb-3">Find Your Dream Job</h1>
+            <p class="lead text-white-50 mx-auto mb-4" style="max-width: 650px;">
+                Search jobs based on your skills and location. Connect with top hiring companies across India.
             </p>
-            
-            <div class="row g-4 mt-2">
-                <!-- Job Seeker Option -->
-                <div class="col-md-6">
-                    <div class="premium-card p-4 h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <div class="text-primary mb-3">
-                                <i class="bi bi-person-workspace" style="font-size: 55px;"></i>
-                            </div>
-                            <h3 class="fw-bold text-dark mb-2">Job Seeker</h3>
-                            <p class="text-secondary small mb-4">
-                                Find your dream job, upload your resume, and apply to top companies in just a few clicks.
-                            </p>
-                        </div>
-                        <a href="jobseeker-login.html" class="btn btn-premium btn-premium-primary w-100 py-3 mt-3">
-                            <i class="bi bi-arrow-right-circle"></i> Continue as Seeker
-                        </a>
-                    </div>
-                </div>
-                
-                <!-- Company Option -->
-                <div class="col-md-6">
-                    <div class="premium-card p-4 h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <div class="text-success mb-3">
-                                <i class="bi bi-building" style="font-size: 55px;"></i>
-                            </div>
-                            <h3 class="fw-bold text-dark mb-2">Company</h3>
-                            <p class="text-secondary small mb-4">
-                                Post open job vacancies, manage active postings, and evaluate applicant resumes efficiently.
-                            </p>
-                        </div>
-                        <a href="company-login.html" class="btn btn-premium btn-premium-secondary w-100 py-3 mt-3">
-                            <i class="bi bi-arrow-right-circle"></i> Continue as Company
-                        </a>
-                    </div>
-                </div>
+
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <a href="jobseeker-register.html" class="btn btn-light rounded-pill px-4 py-3 fw-bold text-primary shadow">
+                    <i class="bi bi-person-workspace me-1"></i> Register as Seeker
+                </a>
+                <a href="company-register.html" class="btn btn-outline-light rounded-pill px-4 py-3 fw-bold shadow">
+                    <i class="bi bi-building-add me-1"></i> Register as Company
+                </a>
             </div>
-            
+        </div>
+    </header>
+
+    <!-- 5. Search Section -->
+    <div class="container">
+        <div class="search-box-card">
+            <form id="homeSearchForm" onsubmit="handleSearch(event)">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-5">
+                        <label class="form-label fw-bold text-dark small text-uppercase"><i class="bi bi-search me-1 text-primary"></i> Skills / Job Title</label>
+                        <input type="text" id="skillSearchInput" class="form-control form-control-lg border-light-subtle" placeholder="e.g. JavaScript, Python, Developer, Designer...">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label fw-bold text-dark small text-uppercase"><i class="bi bi-geo-alt-fill me-1 text-primary"></i> Location</label>
+                        <input type="text" id="locationSearchInput" class="form-control form-control-lg border-light-subtle" placeholder="e.g. Bangalore, Hyderabad, Remote...">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label d-none d-md-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold rounded-3 shadow" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;">
+                            <i class="bi bi-search me-1"></i> Search Jobs
+                        </button>
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
 
+    <!-- 6. Job Listings Section -->
+    <section class="py-5 bg-light" style="margin-top:40px;">
+        <div class="container">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-4">
+                <div>
+                    <h2 class="fw-bold text-dark mb-1"><i class="bi bi-briefcase-fill text-primary me-2"></i>Featured Job Listings</h2>
+                    <p class="text-secondary mb-0">Browse latest career opportunities matching your profile.</p>
+                </div>
+                <a href="jobs.html" class="btn btn-outline-primary rounded-pill px-4 fw-semibold mt-3 mt-md-0">
+                    View All Jobs <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+
+            <!-- Job Cards Container -->
+            <div class="row g-4" id="jobListingsContainer">
+                <!-- Fallback / Loading Skeletons -->
+                <div class="col-12 text-center py-5 text-muted">
+                    <div class="spinner-border text-primary me-2" role="status"></div> Loading latest jobs...
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Top Companies Section -->
+    <section class="py-5" id="companies">
+        <div class="container">
+            <div class="text-center mb-5">
+                <span class="badge bg-secondary-subtle text-secondary px-3 py-2 rounded-pill fw-semibold mb-2">Hiring Partners</span>
+                <h2 class="fw-bold text-dark">Top Companies Hiring Right Now</h2>
+                <p class="text-secondary">Join industry-leading teams looking for skilled candidates like you.</p>
+            </div>
+            <div class="row g-4 text-center">
+                <div class="col-md-3 col-6">
+                    <div class="p-4 rounded-4 border bg-white shadow-sm h-100">
+                        <div class="fs-1 text-primary mb-2"><i class="bi bi-building"></i></div>
+                        <h6 class="fw-bold text-dark mb-1">TechCorp Solutions</h6>
+                        <span class="badge bg-primary-subtle text-primary">Bangalore</span>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="p-4 rounded-4 border bg-white shadow-sm h-100">
+                        <div class="fs-1 text-success mb-2"><i class="bi bi-cpu-fill"></i></div>
+                        <h6 class="fw-bold text-dark mb-1">InnovateX Labs</h6>
+                        <span class="badge bg-success-subtle text-success">Hyderabad</span>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="p-4 rounded-4 border bg-white shadow-sm h-100">
+                        <div class="fs-1 text-purple mb-2" style="color:#7c3aed;"><i class="bi bi-cloud-arrow-up-fill"></i></div>
+                        <h6 class="fw-bold text-dark mb-1">Global Dynamics</h6>
+                        <span class="badge bg-purple-subtle text-purple" style="background:#f3e8ff;color:#7c3aed;">Remote</span>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="p-4 rounded-4 border bg-white shadow-sm h-100">
+                        <div class="fs-1 text-warning mb-2"><i class="bi bi-shield-check"></i></div>
+                        <h6 class="fw-bold text-dark mb-1">Apex Cloud Systems</h6>
+                        <span class="badge bg-warning-subtle text-warning">Pune</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="py-5 bg-white border-top" id="about">
+        <div class="container py-4">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6">
+                    <span class="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill fw-semibold mb-3">About The Platform</span>
+                    <h2 class="fw-bold text-dark display-6 mb-3">Smart Job Vacancy Finder System</h2>
+                    <p class="text-secondary lead fs-6 mb-4">
+                        Our platform simplifies recruitment for candidates and employers alike. Powered by intelligent job matching, applicant tracking, and direct application tools, we empower job seekers to accelerate their careers.
+                    </p>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                <span class="fw-semibold text-dark">Verified Employers</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                <span class="fw-semibold text-dark">ATS Resume Analyzer</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                <span class="fw-semibold text-dark">Instant Job Search</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                <span class="fw-semibold text-dark">1-Click Apply</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6 text-center">
+                    <div class="p-5 rounded-4" style="background:linear-gradient(135deg,#f8fafc,#e2e8f0);border:1px solid #cbd5e1;">
+                        <i class="bi bi-person-workspace display-1 text-primary mb-3"></i>
+                        <h4 class="fw-bold text-dark">Ready to Start?</h4>
+                        <p class="text-secondary small mb-4">Create your account as a Job Seeker or Register your Company to post open vacancies.</p>
+                        <div class="d-flex justify-content-center gap-2">
+                            <a href="jobseeker-register.html" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;">
+                                Seeker Register
+                            </a>
+                            <a href="company-register.html" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                                Company Register
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section / Footer -->
+    <footer class="bg-slate-900 text-white py-5 border-top" id="contact" style="background:#0f172a;">
+        <div class="container">
+            <div class="row g-4 mb-4">
+                <div class="col-lg-4">
+                    <h5 class="fw-bold text-white mb-3"><i class="bi bi-briefcase-fill text-primary me-2"></i>Smart Job Vacancy Finder System</h5>
+                    <p class="text-secondary small">Comprehensive recruitment portal for job seekers and companies.</p>
+                </div>
+                <div class="col-lg-4">
+                    <h6 class="fw-bold text-white mb-3">Quick Links</h6>
+                    <ul class="list-unstyled text-secondary small">
+                        <li class="mb-2"><a href="jobs.html" class="text-decoration-none text-secondary">Browse All Jobs</a></li>
+                        <li class="mb-2"><a href="resume-analyzer.html" class="text-decoration-none text-secondary">AI ATS Resume Analyzer</a></li>
+                        <li class="mb-2"><a href="jobseeker-register.html" class="text-decoration-none text-secondary">Job Seeker Register</a></li>
+                        <li class="mb-2"><a href="company-register.html" class="text-decoration-none text-secondary">Company Register</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-4">
+                    <h6 class="fw-bold text-white mb-3">Contact Support</h6>
+                    <p class="text-secondary small mb-2"><i class="bi bi-envelope me-2"></i>support@smartjobfinder.com</p>
+                    <p class="text-secondary small mb-2"><i class="bi bi-telephone me-2"></i>+91 98765 43210</p>
+                    <p class="text-secondary small"><i class="bi bi-geo-alt me-2"></i>Bangalore, Karnataka, India</p>
+                </div>
+            </div>
+            <div class="border-top border-secondary pt-4 text-center text-secondary small">
+                © 2026 Smart Job Vacancy Finder System. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+
+    <!-- ================================================================
+         REGISTER CHOICE MODAL (JOB SEEKER vs COMPANY)
+         ================================================================ -->
+    <div class="modal fade" id="registerChoiceModal" tabindex="-1" aria-labelledby="registerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg" style="border-radius:24px;">
+                <div class="modal-header border-0 pb-0">
+                    <h4 class="modal-title fw-bold text-dark px-2" id="registerModalLabel">Choose Account Type to Register</h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-secondary px-2 mb-4">Select whether you are looking for job vacancies or posting jobs as a company.</p>
+                    
+                    <div class="row g-3">
+                        <!-- Job Seeker Register Option -->
+                        <div class="col-md-6">
+                            <div onclick="window.location.href='jobseeker-register.html'" class="choice-card h-100">
+                                <div class="text-primary mb-3">
+                                    <i class="bi bi-person-workspace" style="font-size: 50px;"></i>
+                                </div>
+                                <h4 class="fw-bold text-dark mb-2">Job Seeker</h4>
+                                <p class="text-secondary small mb-3">
+                                    Find dream jobs, upload your resume, track applications, and use AI career tools.
+                                </p>
+                                <a href="jobseeker-register.html" class="btn btn-primary rounded-pill px-4 py-2 w-100 fw-semibold" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;">
+                                    Register as Job Seeker <i class="bi bi-arrow-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Company Register Option -->
+                        <div class="col-md-6">
+                            <div onclick="window.location.href='company-register.html'" class="choice-card h-100">
+                                <div class="text-success mb-3">
+                                    <i class="bi bi-building-add" style="font-size: 50px;"></i>
+                                </div>
+                                <h4 class="fw-bold text-dark mb-2">Company / Employer</h4>
+                                <p class="text-secondary small mb-3">
+                                    Post open job vacancies, manage applicants, evaluate candidates, and schedule interviews.
+                                </p>
+                                <a href="company-register.html" class="btn btn-success rounded-pill px-4 py-2 w-100 fw-semibold">
+                                    Register as Company <i class="bi bi-arrow-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ================================================================
+         LOGIN CHOICE MODAL (JOB SEEKER vs COMPANY vs ADMIN)
+         ================================================================ -->
+    <div class="modal fade" id="loginChoiceModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg" style="border-radius:24px;">
+                <div class="modal-header border-0 pb-0">
+                    <h4 class="modal-title fw-bold text-dark px-2" id="loginModalLabel">Login to Smart Job Vacancy Finder</h4>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-secondary px-2 mb-4">Please select your login portal below to access your account dashboard.</p>
+                    
+                    <div class="row g-3">
+                        <!-- Job Seeker Login Option -->
+                        <div class="col-md-4">
+                            <div onclick="window.location.href='jobseeker-login.html'" class="choice-card h-100">
+                                <div class="text-primary mb-3"><i class="bi bi-person-fill" style="font-size: 42px;"></i></div>
+                                <h5 class="fw-bold text-dark mb-2">Job Seeker</h5>
+                                <p class="text-secondary small mb-3">Search & apply for jobs.</p>
+                                <a href="jobseeker-login.html" class="btn btn-outline-primary btn-sm rounded-pill w-100 fw-semibold">Seeker Login</a>
+                            </div>
+                        </div>
+
+                        <!-- Company Login Option -->
+                        <div class="col-md-4">
+                            <div onclick="window.location.href='company-login.html'" class="choice-card h-100">
+                                <div class="text-success mb-3"><i class="bi bi-building" style="font-size: 42px;"></i></div>
+                                <h5 class="fw-bold text-dark mb-2">Company</h5>
+                                <p class="text-secondary small mb-3">Post jobs & manage hiring.</p>
+                                <a href="company-login.html" class="btn btn-outline-success btn-sm rounded-pill w-100 fw-semibold">Company Login</a>
+                            </div>
+                        </div>
+
+                        <!-- Admin Portal Option -->
+                        <div class="col-md-4">
+                            <div onclick="window.location.href='admin-login.html'" class="choice-card h-100">
+                                <div class="text-danger mb-3"><i class="bi bi-shield-lock-fill" style="font-size: 42px;"></i></div>
+                                <h5 class="fw-bold text-dark mb-2">Admin Portal</h5>
+                                <p class="text-secondary small mb-3">Platform management.</p>
+                                <a href="admin-login.html" class="btn btn-outline-danger btn-sm rounded-pill w-100 fw-semibold">Admin Login</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let allJobsList = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadFeaturedJobs();
+        });
+
+        async function loadFeaturedJobs() {
+            const container = document.getElementById('jobListingsContainer');
+            try {
+                let jobs = [];
+                try {
+                    const data = await API.jobs.getAll();
+                    if (data && data.jobs) jobs = data.jobs;
+                } catch (e) {
+                    console.warn('API fallback jobs on home:', e.message);
+                }
+
+                if (!jobs.length) {
+                    jobs = getFallbackHomeJobs();
+                }
+
+                allJobsList = jobs;
+                renderJobListings(allJobsList);
+            } catch (err) {
+                container.innerHTML = `<div class="col-12 text-center text-muted py-4">Unable to load job listings.</div>`;
+            }
+        }
+
+        function getFallbackHomeJobs() {
+            return [
+                { id: '1', title: 'Senior React & Node.js Developer', companyName: 'TechCorp Solutions', location: 'Bangalore', type: 'Full Time', salary: '₹12 - ₹18 LPA', skills: 'React, Node.js, Express, MongoDB' },
+                { id: '2', title: 'Data Scientist & AI Specialist', companyName: 'InnovateX Labs', location: 'Hyderabad', type: 'Full Time', salary: '₹15 - ₹22 LPA', skills: 'Python, Machine Learning, PyTorch, SQL' },
+                { id: '3', title: 'Full Stack Web Developer', companyName: 'Global Dynamics Inc', location: 'Remote', type: 'Full Time', salary: '₹10 - ₹15 LPA', skills: 'JavaScript, HTML, CSS, REST API' }
+            ];
+        }
+
+        function renderJobListings(jobs) {
+            const container = document.getElementById('jobListingsContainer');
+            if (!jobs.length) {
+                container.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="bi bi-inbox fs-2 d-block mb-2 text-secondary"></i>No jobs match your search criteria.</div>`;
+                return;
+            }
+
+            container.innerHTML = jobs.slice(0, 6).map(j => `
+                <div class="col-md-4">
+                    <!-- 6. Job Listing Card -->
+                    <div class="job-card">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-1 font-monospace" style="font-size:11px;">${j.type || 'Full Time'}</span>
+                                <span class="fw-bold text-success" style="font-size:13px;">${j.salary || 'Competitive'}</span>
+                            </div>
+                            <!-- Job Title -->
+                            <h5 class="fw-bold text-dark mb-1">${j.title}</h5>
+                            <!-- Company Name -->
+                            <div class="text-secondary fw-semibold small mb-2"><i class="bi bi-building me-1"></i>${j.companyName || 'Company'}</div>
+                            <!-- Location -->
+                            <div class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i>${j.location || 'India'}</div>
+                            ${j.skills ? `<div class="small text-secondary mb-3"><i class="bi bi-tools me-1 text-primary"></i>${j.skills.substring(0, 45)}...</div>` : ''}
+                        </div>
+                        
+                        <!-- View Details Button -->
+                        <a href="job-details.html?id=${j.id||j._id}" class="btn btn-outline-primary w-100 rounded-pill fw-semibold mt-3">
+                            <i class="bi bi-eye-fill me-1"></i> View Details
+                        </a>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function handleSearch(e) {
+            e.preventDefault();
+            const skillQuery = document.getElementById('skillSearchInput').value.toLowerCase().trim();
+            const locationQuery = document.getElementById('locationSearchInput').value.toLowerCase().trim();
+
+            const filtered = allJobsList.filter(j => {
+                const matchSkill = !skillQuery || j.title.toLowerCase().includes(skillQuery) || (j.skills && j.skills.toLowerCase().includes(skillQuery));
+                const matchLoc = !locationQuery || (j.location && j.location.toLowerCase().includes(locationQuery));
+                return matchSkill && matchLoc;
+            });
+
+            renderJobListings(filtered);
+        }
+    </script>
 </body>
 </html>

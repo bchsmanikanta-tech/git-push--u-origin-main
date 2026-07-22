@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salary & Market Intelligence Hub – Smart Job Vacancy Finder</title>
+    <meta name="description" content="Explore real-time industry salary benchmarks, location pay curves, and top paying companies.">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        .salary-hero {
+            background: linear-gradient(135deg, #064e3b 0%, #0f172a 100%);
+            color: white;
+            padding: 50px 0 40px;
+            border-radius: 0 0 24px 24px;
+        }
+        .salary-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border: 1px solid rgba(226,232,240,0.8);
+            padding: 24px;
+        }
+        .percentile-card {
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg sticky-top bg-white border-bottom shadow-sm py-2">
+    <div class="container">
+        <a class="navbar-brand fw-bold fs-4 d-flex align-items-center gap-2" href="index.html">
+            <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#7c3aed,#4f46e5);display:flex;align-items:center;justify-content:center;">
+                <i class="bi bi-briefcase-fill text-white fs-6"></i>
+            </div>
+            <span>Job<span class="text-primary">Finder</span></span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navContent">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4 gap-lg-2">
+                <li class="nav-item"><a class="nav-link fw-medium" href="index.html">Home</a></li>
+                <li class="nav-item"><a class="nav-link fw-medium" href="jobs.html">Find Jobs</a></li>
+                <li class="nav-item"><a class="nav-link fw-medium" href="resume-analyzer.html">ATS Analyzer</a></li>
+                <li class="nav-item"><a class="nav-link fw-medium text-success active fw-semibold" href="salary-hub.html"><i class="bi bi-cash-stack me-1"></i>Salary Hub</a></li>
+                <li class="nav-item"><a class="nav-link fw-medium" href="career-advisor.html">AI Roadmap</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- Hero Section -->
+<section class="salary-hero text-center">
+    <div class="container">
+        <span class="badge bg-success-subtle text-success px-3 py-2 rounded-pill fw-semibold mb-3">Market Compensation Intelligence</span>
+        <h1 class="fw-bold display-5 mb-3">Know Your Market Worth</h1>
+        <p class="lead text-white-50 mx-auto" style="max-width:640px;">Compare salary benchmarks across job titles, experience levels, and top tech cities in India.</p>
+    </div>
+</section>
+
+<!-- Content Body -->
+<div class="container py-5">
+    <!-- Search Controls -->
+    <div class="salary-card mb-4">
+        <form id="salaryForm" onsubmit="loadBenchmark(event)">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold text-dark">Job Role / Specialization</label>
+                    <select class="form-select" id="roleSelect">
+                        <option value="Full Stack Developer">Full Stack Developer</option>
+                        <option value="Frontend Engineer">Frontend Engineer</option>
+                        <option value="Backend Developer">Backend Developer</option>
+                        <option value="Data Scientist & AI Engineer">Data Scientist & AI Engineer</option>
+                        <option value="UI/UX Designer">UI/UX Designer</option>
+                        <option value="DevOps Engineer">DevOps Engineer</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold text-dark">City / Location</label>
+                    <select class="form-select" id="locationSelect">
+                        <option value="Bangalore">Bangalore (Tech Capital)</option>
+                        <option value="Mumbai">Mumbai</option>
+                        <option value="Hyderabad">Hyderabad</option>
+                        <option value="Delhi NCR">Delhi NCR</option>
+                        <option value="Remote">Remote</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold text-dark">Experience Level</label>
+                    <select class="form-select" id="expSelect">
+                        <option value="Fresher">Fresher (0-1 Year)</option>
+                        <option value="2-4 Years" selected>Mid Level (2-4 Years)</option>
+                        <option value="5-8 Years">Senior Level (5-8 Years)</option>
+                        <option value="8+ Years">Lead / Principal (8+ Years)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-success w-100 py-2 fw-semibold" id="searchBtn">
+                        <i class="bi bi-search me-1"></i> Compare Pay
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Benchmark Results Dashboard -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="salary-card h-100">
+                <div class="d-flex align-items-center justify-content-between mb-4 border-bottom pb-3">
+                    <div>
+                        <h5 class="fw-bold text-dark mb-0" id="resRoleTitle">Full Stack Developer</h5>
+                        <span class="text-muted small" id="resSubTitle">Bangalore • Mid Level (2-4 Years)</span>
+                    </div>
+                    <span class="badge bg-success-subtle text-success fs-6 px-3 py-2 rounded-pill" id="resMedianBadge">₹12.0 LPA Median</span>
+                </div>
+
+                <!-- Percentiles Grid -->
+                <div class="row g-3 mb-4">
+                    <div class="col-3">
+                        <div class="percentile-card">
+                            <div class="text-muted small">MINIMUM</div>
+                            <div class="fs-5 fw-bold text-dark" id="valMin">₹6.0 LPA</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="percentile-card">
+                            <div class="text-muted small">25TH PERCENTILE</div>
+                            <div class="fs-5 fw-bold text-dark" id="valP25">₹8.5 LPA</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="percentile-card border-success" style="background:rgba(16,185,129,0.08);">
+                            <div class="text-success small fw-bold">MEDIAN (50TH)</div>
+                            <div class="fs-4 fw-bold text-success" id="valMedian">₹12.0 LPA</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="percentile-card">
+                            <div class="text-muted small">75TH PERCENTILE</div>
+                            <div class="fs-5 fw-bold text-dark" id="valP75">₹16.5 LPA</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div>
+                    <h6 class="fw-bold text-dark mb-3">Salary Distribution Curve</h6>
+                    <canvas id="salaryChartCanvas" height="220"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Top Employers -->
+            <div class="salary-card mb-4">
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-building-check text-success me-2"></i>Top Paying Employers</h6>
+                <div class="list-group list-group-flush" id="employersList">
+                    <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-0">
+                        <span class="fw-semibold text-dark">TechCorp Solutions</span>
+                        <span class="badge bg-light text-success border">₹14 - ₹22 LPA</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-0">
+                        <span class="fw-semibold text-dark">InnovateX Labs</span>
+                        <span class="badge bg-light text-success border">₹12 - ₹18 LPA</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-0">
+                        <span class="fw-semibold text-dark">Global Dynamics Inc</span>
+                        <span class="badge bg-light text-success border">₹15 - ₹25 LPA</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- City Pay Index Card -->
+            <div class="salary-card">
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-geo-alt-fill text-primary me-2"></i>Location Premium Index</h6>
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                    <span class="text-secondary small">Bangalore (Tech Hub)</span>
+                    <span class="fw-bold text-success">+15% Premium</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                    <span class="text-secondary small">Mumbai</span>
+                    <span class="fw-bold text-success">+12% Premium</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-secondary small">Remote</span>
+                    <span class="fw-bold text-secondary">Base Index (100%)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast-container" style="position:fixed;top:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:10px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script>
+let salaryChart = null;
+
+async function loadBenchmark(e) {
+    if (e) e.preventDefault();
+    const role = document.getElementById('roleSelect').value;
+    const location = document.getElementById('locationSelect').value;
+    const experience = document.getElementById('expSelect').value;
+
+    try {
+        let benchmark = null;
+        try {
+            const res = await API.insights.getSalaryBenchmark(role, location, experience);
+            if (res && res.success && res.benchmark) benchmark = res.benchmark;
+        } catch (err) {
+            console.warn('API benchmark fallback:', err.message);
+        }
+
+        if (!benchmark) {
+            benchmark = getFallbackBenchmark(role, location, experience);
+        }
+
+        renderBenchmark(benchmark);
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function getFallbackBenchmark(role, loc, exp) {
+    return {
+        role,
+        location: loc,
+        experience: exp,
+        min: 600000,
+        p25: 850000,
+        median: 1200000,
+        p75: 1650000,
+        max: 2400000,
+        topEmployers: ['TechCorp Solutions', 'InnovateX Labs', 'Global Dynamics Inc', 'Apex Cloud Systems']
+    };
+}
+
+function renderBenchmark(b) {
+    document.getElementById('resRoleTitle').textContent = b.role;
+    document.getElementById('resSubTitle').textContent = `${b.location} • ${b.experience}`;
+    document.getElementById('resMedianBadge').textContent = `₹${(b.median/100000).toFixed(1)} LPA Median`;
+
+    document.getElementById('valMin').textContent = `₹${(b.min/100000).toFixed(1)} LPA`;
+    document.getElementById('valP25').textContent = `₹${(b.p25/100000).toFixed(1)} LPA`;
+    document.getElementById('valMedian').textContent = `₹${(b.median/100000).toFixed(1)} LPA`;
+    document.getElementById('valP75').textContent = `₹${(b.p75/100000).toFixed(1)} LPA`;
+
+    // Render Chart
+    const ctx = document.getElementById('salaryChartCanvas').getContext('2d');
+    if (salaryChart) salaryChart.destroy();
+
+    salaryChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['Min (10%)', '25th Percentile', 'Median (50%)', '75th Percentile', 'Max (90%)'],
+            datasets: [{
+                label: 'Salary (₹ LPA)',
+                data: [b.min/100000, b.p25/100000, b.median/100000, b.p75/100000, b.max/100000],
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16,185,129,0.1)',
+                borderWidth: 3,
+                pointBackgroundColor: '#10b981',
+                pointRadius: 6,
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { ticks: { callback: v => `₹${v}L` } }
+            }
+        }
+    });
+}
+
+loadBenchmark();
+</script>
+</body>
+</html>

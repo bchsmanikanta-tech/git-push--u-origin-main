@@ -183,12 +183,21 @@
             <i class="bi bi-people-fill"></i> User Management
         </a>
 
-        <div class="nav-section-title">Reports</div>
+        <div class="nav-section-title">Reports & Tools</div>
         <a href="admin-analytics.html" class="admin-nav-link active" id="nav-analytics">
             <i class="bi bi-bar-chart-line-fill"></i> Analytics
         </a>
+        <a href="admin-broadcast.html" class="admin-nav-link" id="nav-broadcast">
+            <i class="bi bi-megaphone-fill"></i> Broadcast Center
+        </a>
+        <a href="admin-logs.html" class="admin-nav-link" id="nav-logs">
+            <i class="bi bi-shield-lock-fill"></i> Audit Logs
+        </a>
 
         <div class="nav-section-title">System</div>
+        <a href="admin-settings.html" class="admin-nav-link" id="nav-settings">
+            <i class="bi bi-gear-fill"></i> System Settings
+        </a>
         <a href="index.html" class="admin-nav-link" id="nav-site">
             <i class="bi bi-globe"></i> View Main Site
         </a>
@@ -220,9 +229,20 @@
             <div class="topbar-subtitle d-none d-md-block" id="dateDisplay"></div>
         </div>
         <div class="d-flex align-items-center gap-3">
-            <div class="position-relative">
-                <i class="bi bi-bell fs-5 text-secondary" style="cursor:pointer;"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:9px;" id="alertBadge">0</span>
+            <div class="notification-dropdown-wrapper d-inline-block position-relative me-2">
+                <button class="btn btn-outline-primary rounded-circle position-relative p-2" id="notifBellBtn" aria-expanded="false" style="width:40px; height:40px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+                    <i class="bi bi-bell-fill"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notifBadge" style="font-size: 9px; padding: 3px 6px;">0</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow p-2" aria-labelledby="notifBellBtn" id="notifDropdownList">
+                    <li class="dropdown-header border-bottom pb-2 mb-2 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-dark" style="color: var(--text-primary) !important;"><i class="bi bi-bell-fill me-1 text-primary"></i>Notifications</span>
+                        <button class="btn btn-link text-danger text-decoration-none p-0 x-small" id="clearAllNotifsBtn" style="font-size: 11px; font-weight: 600;">Clear All</button>
+                    </li>
+                    <div id="notifItemsContainer">
+                        <li class="text-center py-3 text-secondary small">No notifications yet</li>
+                    </div>
+                </ul>
             </div>
             <a href="admin-jobs.html" class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;border-radius:8px;font-size:12px;">
                 <i class="bi bi-plus-lg"></i> Quick Add
@@ -593,13 +613,13 @@ function refreshHealth() {
 // ── Export quick report ──
 document.getElementById('exportReportBtn').addEventListener('click', async () => {
     try {
-        const res = await fetch(`${BASE}/api/admin/analytics/export-summary`, {
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('adminToken') }
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message);
-        downloadCSV(data.csv, 'admin_summary_report.csv');
-        showToast('Report exported successfully!', 'success');
+        const data = await API.admin.exportAnalyticsSummary();
+        if (data && data.csv) {
+            downloadCSV(data.csv, 'admin_summary_report.csv');
+            showToast('Report exported successfully!', 'success');
+        } else {
+            throw new Error('No CSV data returned');
+        }
     } catch (err) {
         showToast('Export failed. ' + err.message, 'error');
     }

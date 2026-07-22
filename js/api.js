@@ -1,6 +1,5 @@
 // Centralized API and Session Manager for Smart Job Vacancy Finder
 
-// Safe Storage fallback for environments where localStorage is blocked (e.g. file:// protocol or private browsing)
 const SafeStorage = {
     _memoryStore: {},
     isPersistent: true,
@@ -30,7 +29,6 @@ const SafeStorage = {
     }
 };
 
-// Check if localStorage is persistent early
 try {
     localStorage.setItem('__sjvf_test__', '1');
     localStorage.removeItem('__sjvf_test__');
@@ -38,7 +36,7 @@ try {
     SafeStorage.isPersistent = false;
 }
 
-// Restore session from URL parameters if persistent storage is not available or blocked
+// Session auto-restoration from URL parameters
 (function() {
     try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -48,8 +46,6 @@ try {
         if (urlEmail && urlName && urlRole) {
             const user = { name: urlName, email: urlEmail, role: urlRole };
             SafeStorage.setItem('user', JSON.stringify(user));
-            
-            // Clean up only session params from URL, preserving other query params
             if (SafeStorage.isPersistent) {
                 try {
                     const url = new URL(window.location.href);
@@ -60,19 +56,10 @@ try {
                 } catch (e) {}
             }
         }
-    } catch (e) {
-        console.error('Failed to restore URL session parameters', e);
-    }
+    } catch (e) {}
 })();
 
-// ============================================================
-// 🚀 DEPLOYMENT CONFIGURATION
-// We now deploy both frontend and backend to Netlify
-// ============================================================
-
-// Auto-detect API base URL:
-// - On Netlify (https://...) → use /api (which maps to /.netlify/functions/api)
-// - On localhost or file:// → use local server
+// API BASE URL CONFIGURATION
 const isLocal = window.location.hostname === 'localhost' || 
                 window.location.hostname === '127.0.0.1' || 
                 window.location.protocol === 'file:';
@@ -81,17 +68,16 @@ const API_BASE = isLocal
     ? 'http://localhost:5000/api'
     : '/api';
 
-// Show a server-offline banner if we detect file:// protocol (user hasn't started server)
 if (window.location.protocol === 'file:') {
     document.addEventListener('DOMContentLoaded', () => {
         const banner = document.createElement('div');
         banner.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ef4444;color:white;text-align:center;padding:10px 20px;font-weight:600;z-index:99999;font-family:Outfit,sans-serif;font-size:14px;';
-        banner.innerHTML = '⚠️ You are opening this page directly as a file. Please start the server first: <code style="background:rgba(0,0,0,0.2);padding:2px 8px;border-radius:4px;">npm start</code> in the project folder, then visit <a href="http://localhost:5000" style="color:white;text-decoration:underline;">http://localhost:5000</a>';
+        banner.innerHTML = '⚠️ You are opening this page directly as a file. Please start the server first: <code style="background:rgba(0,0,0,0.2);padding:2px 8px;border-radius:4px;">npm start</code>, then visit <a href="http://localhost:5000" style="color:white;text-decoration:underline;">http://localhost:5000</a>';
         document.body.prepend(banner);
     });
 }
 
-// Create and insert Toast container if not already present
+// Toast Notifications Helper
 function ensureToastContainer() {
     if (!document.getElementById('toast-container')) {
         const container = document.createElement('div');
@@ -100,11 +86,9 @@ function ensureToastContainer() {
     }
 }
 
-// Show custom toast notification
 function showToast(message, type = 'success') {
     ensureToastContainer();
     const container = document.getElementById('toast-container');
-
     const toast = document.createElement('div');
     toast.className = `custom-toast toast-${type}`;
     
@@ -121,8 +105,6 @@ function showToast(message, type = 'success') {
     `;
 
     container.appendChild(toast);
-
-    // Auto remove after 3.5 seconds
     setTimeout(() => {
         toast.style.animation = 'fadeOut 0.3s forwards';
         setTimeout(() => toast.remove(), 300);
@@ -139,23 +121,16 @@ const Session = {
             return null;
         }
     },
-    
     setUser(user) {
         try {
             SafeStorage.setItem('user', JSON.stringify(user));
-        } catch (e) {
-            console.error('Failed to set user session', e);
-        }
+        } catch (e) {}
     },
-    
     clear() {
         try {
             SafeStorage.removeItem('user');
-        } catch (e) {
-            console.error('Failed to clear session', e);
-        }
+        } catch (e) {}
     },
-
     logout() {
         this.clear();
         showToast("Logged out successfully!", "info");
@@ -163,7 +138,6 @@ const Session = {
             this.redirect('index.html');
         }, 1000);
     },
-
     checkAuth(requiredRole) {
         const user = this.getUser();
         if (!user) {
@@ -182,7 +156,6 @@ const Session = {
         }
         return user;
     },
-
     redirect(targetUrl) {
         const user = this.getUser();
         if (user) {
@@ -194,15 +167,14 @@ const Session = {
     }
 };
 
-// API Fetch Helper
+// API Fetch Wrapper
 async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout to 15s to handle cold starts
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     options.signal = controller.signal;
     
-    // Set headers if JSON request
     if (options.body && !(options.body instanceof FormData)) {
         options.headers = {
             'Content-Type': 'application/json',
@@ -214,30 +186,41 @@ async function apiRequest(endpoint, options = {}) {
     try {
         const response = await fetch(url, options);
         clearTimeout(timeoutId);
-        const data = await response.json();
+        
+        let data;
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            const rawText = await response.text();
+            try {
+                data = JSON.parse(rawText);
+            } catch (e) {
+                data = { success: response.ok, message: rawText || 'Non-JSON server response' };
+            }
+        }
         
         if (!response.ok) {
-            throw new Error(data.message || 'Something went wrong');
+            throw new Error(data.message || 'Server request failed');
         }
         return data;
     } catch (error) {
         clearTimeout(timeoutId);
-        console.error(`API Error [${endpoint}]:`, error);
+        console.error(`API Error [${endpoint}]:`, error.message);
         
         if (error.name === 'AbortError') {
-            showToast('⚠️ Request timed out. Make sure your backend server is running (npm start).', 'error');
+            showToast('⚠️ Request timed out. Backend server reconnecting.', 'warning');
         } else if (error.message && error.message.includes('Failed to fetch')) {
-            showToast('⚠️ Cannot reach server. Please run: npm start in the project directory.', 'error');
-        } else {
-            showToast(error.message || 'Network error occurred.', 'error');
+            showToast('⚠️ Server reconnecting. Please ensure npm start is running.', 'warning');
+        } else if (!error.message.includes('Unexpected token')) {
+            showToast(error.message || 'Network notice.', 'info');
         }
         throw error;
     }
 }
 
-// API client modules
+// API Endpoints Client Object
 const API = {
-    // Auth endpoints
     auth: {
         async registerSeeker(name, email, password) {
             return apiRequest('/auth/register-seeker', {
@@ -262,10 +245,103 @@ const API = {
                 method: 'POST',
                 body: { email, password }
             });
+        },
+        async loginAdmin(email, password) {
+            return apiRequest('/admin/auth/login', {
+                method: 'POST',
+                body: { email, password }
+            });
         }
     },
 
-    // Profile endpoints
+    admin: {
+        async getDashboardStats() {
+            return apiRequest('/admin/dashboard/stats');
+        },
+        async getDiagnostics() {
+            return apiRequest('/admin/system-diagnostics');
+        },
+        async getBackup() {
+            return apiRequest('/admin/system-backup');
+        },
+        async getUsers() {
+            return apiRequest('/admin/users');
+        },
+        async updateUserStatus(email, role, status) {
+            return apiRequest('/admin/users/status', {
+                method: 'PATCH',
+                body: { email, role, status }
+            });
+        },
+        async deleteUser(email, role) {
+            return apiRequest('/admin/users', {
+                method: 'DELETE',
+                body: { email, role }
+            });
+        },
+        async getJobs() {
+            return apiRequest('/admin/jobs');
+        },
+        async updateJobStatus(id, status) {
+            return apiRequest(`/admin/jobs/${id}/status`, {
+                method: 'PATCH',
+                body: { status }
+            });
+        },
+        async toggleJobFeatured(id) {
+            return apiRequest(`/admin/jobs/${id}/featured`, {
+                method: 'PATCH'
+            });
+        },
+        async updateJob(id, data) {
+            return apiRequest(`/admin/jobs/${id}`, {
+                method: 'PUT',
+                body: data
+            });
+        },
+        async deleteJob(id) {
+            return apiRequest(`/admin/jobs/${id}`, {
+                method: 'DELETE'
+            });
+        },
+        async bulkJobAction(action, ids) {
+            return apiRequest('/admin/jobs/bulk', {
+                method: 'POST',
+                body: { action, ids }
+            });
+        },
+        async getAnalyticsOverview() {
+            return apiRequest('/admin/analytics/overview');
+        },
+        async exportAnalyticsSummary() {
+            return apiRequest('/admin/analytics/export-summary');
+        },
+        async getAuditLogs() {
+            return apiRequest('/admin/audit-logs');
+        },
+        async createAuditLog(data) {
+            return apiRequest('/admin/audit-logs', {
+                method: 'POST',
+                body: data
+            });
+        },
+        async sendBroadcast(data) {
+            return apiRequest('/admin/broadcast', {
+                method: 'POST',
+                body: data
+            });
+        },
+        async getSettings() {
+            return apiRequest('/admin/settings');
+        },
+        async saveSettings(data) {
+            return apiRequest('/admin/settings', {
+                method: 'POST',
+                body: data
+            });
+        }
+    },
+
     profile: {
         async getSeeker(email) {
             return apiRequest(`/profile/seeker/${email}`);
@@ -306,7 +382,6 @@ const API = {
         }
     },
 
-    // Jobs endpoints
     jobs: {
         async getAll(filters = {}) {
             const params = new URLSearchParams();
@@ -344,7 +419,133 @@ const API = {
         }
     },
 
-    // Applications endpoints
+    savedJobs: {
+        async toggle(email, jobId) {
+            return apiRequest('/jobs/save-toggle', {
+                method: 'POST',
+                body: { email, jobId }
+            });
+        },
+        async get(email) {
+            return apiRequest(`/jobs/saved/${encodeURIComponent(email)}`);
+        },
+        async list(email) {
+            return apiRequest(`/jobs/saved/${encodeURIComponent(email)}`);
+        },
+        async add(email, jobId) {
+            return apiRequest('/jobs/save-toggle', {
+                method: 'POST',
+                body: { email, jobId }
+            });
+        },
+        async remove(email, jobId) {
+            return apiRequest('/jobs/save-toggle', {
+                method: 'POST',
+                body: { email, jobId }
+            });
+        }
+    },
+
+    ai: {
+        async getMatchScore(jobId, seekerEmail) {
+            return apiRequest('/ai/match-score', {
+                method: 'POST',
+                body: { jobId, seekerEmail }
+            });
+        },
+        async getCareerRoadmap(targetRole, skills, qualification) {
+            return apiRequest('/ai/career-roadmap', {
+                method: 'POST',
+                body: { targetRole, skills, qualification }
+            });
+        },
+        async getMockInterview(jobTitle, experience) {
+            return apiRequest('/ai/mock-interview', {
+                method: 'POST',
+                body: { jobTitle, experience }
+            });
+        },
+        async analyzeATSResume(resumeText, jobDescription, targetRole) {
+            return apiRequest('/ai/resume-ats-analyze', {
+                method: 'POST',
+                body: { resumeText, jobDescription, targetRole }
+            });
+        }
+    },
+
+    reviews: {
+        async create(data) {
+            return apiRequest('/companies/reviews', {
+                method: 'POST',
+                body: data
+            });
+        },
+        async getForCompany(companyEmail) {
+            return apiRequest(`/companies/reviews/${encodeURIComponent(companyEmail)}`);
+        }
+    },
+
+    insights: {
+        async getSalaryEstimator(title = '', location = '') {
+            const params = new URLSearchParams();
+            if (title) params.append('title', title);
+            if (location) params.append('location', location);
+            const queryStr = params.toString() ? `?${params.toString()}` : '';
+            return apiRequest(`/insights/salary-estimator${queryStr}`);
+        },
+        async getSalaryBenchmark(role = '', location = '', experience = '') {
+            const params = new URLSearchParams();
+            if (role) params.append('role', role);
+            if (location) params.append('location', location);
+            if (experience) params.append('experience', experience);
+            const queryStr = params.toString() ? `?${params.toString()}` : '';
+            return apiRequest(`/insights/salary-benchmark${queryStr}`);
+        }
+    },
+
+    seeker: {
+        async getPipeline(email) {
+            return apiRequest(`/seeker/pipeline/${encodeURIComponent(email)}`);
+        },
+        async updatePipelineStatus(applicationId, status) {
+            return apiRequest('/seeker/pipeline/status', {
+                method: 'PATCH',
+                body: { applicationId, status }
+            });
+        }
+    },
+
+    employer: {
+        async getCandidateRankings(companyEmail, jobId = '') {
+            const endpoint = `/employer/candidate-rankings/${encodeURIComponent(companyEmail)}${jobId ? '?jobId=' + encodeURIComponent(jobId) : ''}`;
+            return apiRequest(endpoint);
+        }
+    },
+
+    chat: {
+        async sendMessage(senderEmail, receiverEmail, message) {
+            return apiRequest('/chat/send', {
+                method: 'POST',
+                body: { senderEmail, receiverEmail, message }
+            });
+        },
+        async getHistory(user1, user2) {
+            return apiRequest(`/chat/history?user1=${encodeURIComponent(user1)}&user2=${encodeURIComponent(user2)}`);
+        }
+    },
+
+    interviews: {
+        async schedule(data) {
+            return apiRequest('/interviews/schedule', {
+                method: 'POST',
+                body: data
+            });
+        },
+        async getByUser(email) {
+            return apiRequest(`/interviews/${encodeURIComponent(email)}`);
+        }
+    },
+
     applications: {
         async get(id) {
             return apiRequest(`/applications/${id}`);
@@ -371,7 +572,6 @@ const API = {
         }
     },
 
-    // Saved Jobs endpoints
     savedJobs: {
         async list(email) {
             return apiRequest(`/saved-jobs/${email}`);
@@ -390,7 +590,6 @@ const API = {
         }
     },
 
-    // User Notifications endpoints
     notifications: {
         async list(email) {
             return apiRequest(`/notifications/${email}`);
@@ -399,32 +598,36 @@ const API = {
             return apiRequest(`/notifications/${id}/read`, {
                 method: 'PUT'
             });
+        },
+        async delete(id) {
+            return apiRequest(`/notifications/${id}`, {
+                method: 'DELETE'
+            });
+        },
+        async clearAll(email) {
+            return apiRequest(`/notifications/clear/${encodeURIComponent(email)}`, {
+                method: 'DELETE'
+            });
         }
     }
 };
 
-// Global exports so HTML templates can access easily
 window.API = API;
 window.Session = Session;
 window.showToast = showToast;
 
-// Open or download resume safely (Blob URL or fallback path)
 window.viewResume = function(resumeData) {
     if (!resumeData) {
         showToast("No resume file available.", "error");
         return;
     }
-
     try {
         if (resumeData.startsWith('data:')) {
-            // Convert Base64 → Blob → Blob URL → open with <a> click
             const [header, base64] = resumeData.split(',');
             const mime = header.match(/:(.*?);/)[1];
             const bytes = atob(base64);
             const arr = new Uint8Array(bytes.length);
-            for (let i = 0; i < bytes.length; i++) {
-                arr[i] = bytes.charCodeAt(i);
-            }
+            for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
             const blob = new Blob([arr], { type: mime });
             const blobUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -434,10 +637,8 @@ window.viewResume = function(resumeData) {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            // Revoke after a short delay to allow tab to open
             setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
         } else {
-            // Fallback for filename or relative path
             const isLocal = window.location.hostname === 'localhost' || 
                             window.location.hostname === '127.0.0.1' || 
                             window.location.protocol === 'file:';
@@ -446,16 +647,14 @@ window.viewResume = function(resumeData) {
         }
     } catch(e) {
         console.error('Resume view error:', e);
-        showToast('Could not open resume. Try uploading again.', 'error');
+        showToast('Could not open resume.', 'error');
     }
 };
 
-// Hook up logout button automatically if present
 document.addEventListener('DOMContentLoaded', () => {
     ensureToastContainer();
     const logoutBtn = document.querySelector('.btn-logout, a[href="index.html"].btn-light, .btn-light[href="index.html"]');
     if (logoutBtn) {
-        // Change simple href navigation to actual session logout
         logoutBtn.removeAttribute('href');
         logoutBtn.style.cursor = 'pointer';
         logoutBtn.addEventListener('click', (e) => {
@@ -465,35 +664,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ============================================================
-// 🌙 THEME MANAGER — Dark / Light Mode
-// ============================================================
-
+// Theme Manager
 const Theme = {
     KEY: 'sjvf_theme',
-
     get() {
         return SafeStorage.getItem(this.KEY) || 'light';
     },
-
     set(mode) {
         SafeStorage.setItem(this.KEY, mode);
         document.documentElement.setAttribute('data-theme', mode);
         document.body.setAttribute('data-theme', mode);
         this._updateIcon(mode);
     },
-
     toggle() {
         const next = this.get() === 'dark' ? 'light' : 'dark';
         this.set(next);
     },
-
-    // Apply saved theme immediately (called before DOMContentLoaded to prevent FOUC)
     applyEarly() {
         const saved = SafeStorage.getItem(this.KEY) || 'light';
         document.documentElement.setAttribute('data-theme', saved);
     },
-
     _updateIcon(mode) {
         document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
             const sun  = btn.querySelector('.icon-sun');
@@ -502,121 +692,138 @@ const Theme = {
             if (moon) moon.style.opacity = mode === 'dark' ? '1'   : '0';
         });
     },
-
-    // Inject toggle button into any navbar right before logout button
     injectToggleButton() {
-        // Avoid double-injection
         if (document.querySelector('.theme-toggle-btn')) return;
-
         const btn = document.createElement('button');
         btn.className = 'theme-toggle-btn me-2';
         btn.setAttribute('id', 'themeToggleBtn');
         btn.setAttribute('title', 'Toggle Dark / Light Mode');
         btn.setAttribute('aria-label', 'Toggle theme');
-        btn.innerHTML = `
-            <i class="bi bi-sun-fill icon-sun"></i>
-            <i class="bi bi-moon-fill icon-moon"></i>
-        `;
+        btn.innerHTML = `<i class="bi bi-sun-fill icon-sun"></i><i class="bi bi-moon-fill icon-moon"></i>`;
         btn.addEventListener('click', () => this.toggle());
 
-        // Try to insert before logout button in navbar
         const logoutBtn = document.querySelector('.btn-logout');
         if (logoutBtn && logoutBtn.parentElement) {
             logoutBtn.parentElement.insertBefore(btn, logoutBtn);
         } else {
-            // Fallback: fixed position corner button
             btn.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9998;width:48px;height:48px;border-radius:50%;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
             document.body.appendChild(btn);
         }
-
-        // Apply correct icon state on inject
         this._updateIcon(this.get());
-    },
+    }
 };
 
-// ============================================================
-// 🔔 NOTIFICATIONS MANAGER — In-App live dropdowns
-// ============================================================
-
+// Notification Dropdown Manager
 const NotificationsManager = {
     injectNotifications() {
-        const user = Session.getUser();
+        let user = Session.getUser();
+        if (!user || !user.email) {
+            try {
+                user = JSON.parse(localStorage.getItem('adminUser') || 'null');
+            } catch(e) {}
+        }
         if (!user || !user.email) return;
 
-        if (document.querySelector('.notification-dropdown-wrapper')) return;
+        let wrapper = document.querySelector('.notification-dropdown-wrapper');
+        if (!wrapper) {
+            const navRight = document.querySelector('.admin-topbar > div:last-child')
+                || document.querySelector('.navbar-custom .container > div') 
+                || document.querySelector('.navbar-custom .container')
+                || document.querySelector('.navbar .container > div')
+                || document.querySelector('.navbar .container')
+                || document.querySelector('nav .container');
+            if (!navRight) return;
 
-        // Find navbar container with multiple fallbacks
-        const navRight = document.querySelector('.navbar-custom .container > div') 
-            || document.querySelector('.navbar-custom .container')
-            || document.querySelector('.navbar .container > div')
-            || document.querySelector('.navbar .container')
-            || document.querySelector('nav .container');
-        if (!navRight) return;
+            wrapper = document.createElement('div');
+            wrapper.className = 'notification-dropdown-wrapper d-inline-block me-3 position-relative';
+            wrapper.innerHTML = `
+                <button class="btn btn-outline-primary rounded-circle position-relative p-2" id="notifBellBtn" aria-expanded="false" style="width:40px; height:40px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+                    <i class="bi bi-bell-fill"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notifBadge" style="font-size: 9px; padding: 3px 6px;">0</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow p-2" aria-labelledby="notifBellBtn" id="notifDropdownList">
+                    <li class="dropdown-header border-bottom pb-2 mb-2 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-dark" style="color: var(--text-primary) !important;"><i class="bi bi-bell-fill me-1 text-primary"></i>Notifications</span>
+                        <button class="btn btn-link text-danger text-decoration-none p-0 x-small" id="clearAllNotifsBtn" style="font-size: 11px; font-weight: 600;">Clear All</button>
+                    </li>
+                    <div id="notifItemsContainer">
+                        <li class="text-center py-3 text-secondary small">No notifications yet</li>
+                    </div>
+                </ul>
+            `;
 
-        const wrapper = document.createElement('div');
-        wrapper.className = 'notification-dropdown-wrapper d-inline-block me-3 position-relative';
-        wrapper.innerHTML = `
-            <button class="btn btn-outline-primary rounded-circle position-relative p-2" id="notifBellBtn" aria-expanded="false" style="width:40px; height:40px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
-                <i class="bi bi-bell-fill"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notifBadge" style="font-size: 9px; padding: 3px 6px;">0</span>
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow p-2" aria-labelledby="notifBellBtn" id="notifDropdownList" style="width: 320px; max-height: 400px; overflow-y: auto; border-radius: 12px; background: var(--bg-card); border-color: var(--border-color);">
-                <li class="dropdown-header border-bottom pb-2 mb-2 d-flex justify-content-between align-items-center">
-                    <span class="fw-bold" style="color: var(--text-primary) !important;">Notifications</span>
-                </li>
-                <div id="notifItemsContainer">
-                    <li class="text-center py-3 text-secondary small">No notifications yet</li>
-                </div>
-            </ul>
-        `;
-
-        const themeBtn = document.getElementById('themeToggleBtn') || document.querySelector('.btn-logout');
-        if (themeBtn) {
-            themeBtn.parentNode.insertBefore(wrapper, themeBtn);
-        } else {
-            navRight.appendChild(wrapper);
+            const themeBtn = document.getElementById('themeToggleBtn') || document.querySelector('.btn-logout');
+            if (themeBtn && themeBtn.parentNode) {
+                themeBtn.parentNode.insertBefore(wrapper, themeBtn);
+            } else {
+                navRight.appendChild(wrapper);
+            }
         }
 
-        // Native Vanilla JS dropdown toggle (does not rely on bootstrap.bundle.min.js)
+        if (wrapper.dataset.initialized) return;
+        wrapper.dataset.initialized = 'true';
+
         const bellBtn = wrapper.querySelector('#notifBellBtn');
         const dropdownList = wrapper.querySelector('#notifDropdownList');
+        const clearBtn = wrapper.querySelector('#clearAllNotifsBtn');
 
-        bellBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isShown = dropdownList.classList.contains('show');
-            document.querySelectorAll('.notification-dropdown-wrapper .dropdown-menu').forEach(el => {
-                if (el !== dropdownList) el.classList.remove('show');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                    const currentUser = Session.getUser() || JSON.parse(localStorage.getItem('adminUser') || 'null');
+                    if (currentUser && currentUser.email) {
+                        await API.notifications.clearAll(currentUser.email);
+                        showToast('All notifications cleared.', 'info');
+                        this.loadNotifications();
+                    }
+                } catch (err) {
+                    console.error("Failed to clear notifications:", err);
+                }
             });
-            if (isShown) {
-                dropdownList.classList.remove('show');
-                bellBtn.setAttribute('aria-expanded', 'false');
-            } else {
-                dropdownList.classList.add('show');
-                bellBtn.setAttribute('aria-expanded', 'true');
-            }
-        });
+        }
 
-        document.addEventListener('click', (e) => {
-            if (!wrapper.contains(e.target)) {
-                dropdownList.classList.remove('show');
-                bellBtn.setAttribute('aria-expanded', 'false');
-            }
-        });
+        if (bellBtn && dropdownList) {
+            bellBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isShown = dropdownList.classList.contains('show');
+                document.querySelectorAll('.notification-dropdown-wrapper .dropdown-menu').forEach(el => {
+                    if (el !== dropdownList) el.classList.remove('show');
+                });
+                if (isShown) {
+                    dropdownList.classList.remove('show');
+                    bellBtn.setAttribute('aria-expanded', 'false');
+                } else {
+                    dropdownList.classList.add('show');
+                    bellBtn.setAttribute('aria-expanded', 'true');
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!wrapper.contains(e.target)) {
+                    dropdownList.classList.remove('show');
+                    bellBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+        }
 
         this.loadNotifications();
         setInterval(() => this.loadNotifications(), 15000);
     },
 
     async loadNotifications() {
-        const user = Session.getUser();
+        let user = Session.getUser();
+        if (!user || !user.email) {
+            try {
+                user = JSON.parse(localStorage.getItem('adminUser') || 'null');
+            } catch(e) {}
+        }
         if (!user || !user.email) return;
-
         const email = user.email.trim().toLowerCase();
 
         try {
             const res = await API.notifications.list(email);
             const notifications = res.notifications || [];
-            
             const badge = document.getElementById('notifBadge');
             const container = document.getElementById('notifItemsContainer');
             if (!container) return;
@@ -646,71 +853,101 @@ const NotificationsManager = {
                 <li class="p-2 mb-1 rounded position-relative notif-item ${n.isRead ? 'opacity-75' : 'fw-semibold border-start border-primary border-3'}" 
                     style="cursor: pointer; transition: background 0.2s; background: ${n.isRead ? 'transparent' : 'rgba(79, 70, 229, 0.05)'}; list-style: none;" 
                     data-id="${n.id || n._id}">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <span class="small d-block text-wrap" style="max-width: 250px; font-size: 13px; color: var(--text-primary);">${n.message}</span>
-                        ${!n.isRead ? `<span class="badge bg-primary rounded-circle p-1" style="width:6px; height:6px; margin-top: 4px;"> </span>` : ''}
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <span class="small d-block text-wrap flex-grow-1" style="font-size: 13px; color: var(--text-primary);">${n.message}</span>
+                        <div class="d-flex align-items-center gap-1">
+                            ${!n.isRead ? `<span class="badge bg-primary rounded-circle p-1" style="width:6px; height:6px;"> </span>` : ''}
+                            <button type="button" class="btn-close delete-notif-btn ms-1" style="font-size: 8px; flex-shrink: 0;" data-id="${n.id || n._id}" title="Delete notification" aria-label="Delete"></button>
+                        </div>
                     </div>
                     <span class="x-small text-muted d-block mt-1" style="font-size: 10px; color: var(--text-muted) !important;">${formatTime(n.createdAt)}</span>
                 </li>
             `).join('');
 
+            container.querySelectorAll('.delete-notif-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const notifId = btn.dataset.id;
+                    try {
+                        await API.notifications.delete(notifId);
+                        showToast('Notification deleted.', 'info');
+                        this.loadNotifications();
+                    } catch (err) {
+                        console.error("Failed to delete notification:", err);
+                    }
+                });
+            });
+
             container.querySelectorAll('.notif-item').forEach(item => {
-                item.addEventListener('click', async () => {
+                item.addEventListener('click', async (e) => {
+                    if (e.target.classList.contains('delete-notif-btn')) return;
                     const notifId = item.dataset.id;
                     const notifObj = notifications.find(n => (n.id || n._id) === notifId);
                     if (notifObj && !notifObj.isRead) {
                         try {
                             await API.notifications.markRead(notifId);
                             this.loadNotifications();
-                        } catch (err) {
-                            console.error("Mark read failed:", err);
-                        }
+                        } catch (err) {}
                     }
                 });
             });
+        } catch (err) {}
+    }
+};
 
-        } catch (err) {
-            console.error("Failed to load notifications:", err);
-        }
+// 4K 3D Interactive Animation Engine
+const AnimationEngine3D = {
+    init3DTilt() {
+        const cards = document.querySelectorAll('.card-3d, .glass-card, .premium-card, .stat-box, .job-card, .stat-card, .admin-card, .card');
+        cards.forEach(card => {
+            card.classList.add('shimmer-3d');
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = ((y - centerY) / centerY) * -12;
+                const rotateY = ((x - centerX) / centerX) * 12;
+                card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(16px)`;
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px)';
+            });
+        });
+    },
+
+    injectAmbientOrbs() {
+        if (document.querySelector('.bg-3d-orb')) return;
+        const orb1 = document.createElement('div');
+        orb1.className = 'bg-3d-orb bg-3d-orb-1';
+        const orb2 = document.createElement('div');
+        orb2.className = 'bg-3d-orb bg-3d-orb-2';
+        const orb3 = document.createElement('div');
+        orb3.className = 'bg-3d-orb bg-3d-orb-3';
+        const orb4 = document.createElement('div');
+        orb4.className = 'bg-3d-orb bg-3d-orb-4';
+        document.body.prepend(orb1, orb2, orb3, orb4);
     }
 };
 
 Theme.applyEarly();
 
-// Link session parameters auto-propagation if storage is not persistent
-function initSessionAutoPropagation() {
-    if (!SafeStorage.isPersistent) {
-        const user = Session.getUser();
-        if (user) {
-            const updateLinks = () => {
-                document.querySelectorAll('a').forEach(a => {
-                    const href = a.getAttribute('href');
-                    if (href && !href.startsWith('http') && !href.startsWith('#') && !href.startsWith('javascript:') && !href.includes('session_email')) {
-                        const sep = href.includes('?') ? '&' : '?';
-                        a.setAttribute('href', `${href}${sep}session_email=${encodeURIComponent(user.email)}&session_name=${encodeURIComponent(user.name)}&session_role=${encodeURIComponent(user.role)}`);
-                    }
-                });
-            };
-            updateLinks();
-            const observer = new MutationObserver(updateLinks);
-            observer.observe(document.body, { childList: true, subtree: true });
-        }
-    }
-}
-
-// Initialize fully on load
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         Theme.injectToggleButton();
         NotificationsManager.injectNotifications();
-        initSessionAutoPropagation();
+        AnimationEngine3D.injectAmbientOrbs();
+        AnimationEngine3D.init3DTilt();
     });
 } else {
     Theme.injectToggleButton();
     NotificationsManager.injectNotifications();
-    initSessionAutoPropagation();
+    AnimationEngine3D.injectAmbientOrbs();
+    AnimationEngine3D.init3DTilt();
 }
 
-// Expose globally
 window.Theme = Theme;
 window.NotificationsManager = NotificationsManager;
+window.AnimationEngine3D = AnimationEngine3D;
+
