@@ -1,11 +1,10 @@
 [build]
-  framework = "static"
   functions = "netlify/functions"
   publish = "."
 
 [dev]
-  command = "npm run netlify"
-  targetPort = 8888
+  command = "node server.js"
+  targetPort = 5000
 
 [[redirects]]
   from = "/api/*"
