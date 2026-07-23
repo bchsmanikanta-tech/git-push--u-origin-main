@@ -416,6 +416,9 @@ const API = {
             return apiRequest(`/jobs/${id}`, {
                 method: 'DELETE'
             });
+        },
+        async getRecommendations(email) {
+            return apiRequest(`/jobs/recommendations/${encodeURIComponent(email)}`);
         }
     },
 

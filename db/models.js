@@ -6,6 +6,7 @@ const jobseekerSchema = new mongoose.Schema({
     email:         { type: String, required: true, unique: true, lowercase: true },
     password:      { type: String, required: true },
     qualification: { type: String, default: '' },
+    cgpa:          { type: String, default: '' },
     skills:        { type: String, default: '' },
     photo:         { type: String, default: '' },
     resume:        { type: String, default: '' },
@@ -59,7 +60,12 @@ const applicationSchema = new mongoose.Schema({
     certification:{ type: String, default: '' },
     address:      { type: String, default: '' },
     city:         { type: String, default: '' },
-    state:        { type: String, default: '' }
+    state:        { type: String, default: '' },
+    githubProfile:{ type: String, default: '' },
+    linkedinProfile:{ type: String, default: '' },
+    experienceYears:{ type: String, default: '' },
+    qualification:{ type: String, default: '' },
+    expectedSalary:{ type: String, default: '' }
 }, { _id: false, timestamps: true });
 
 // ─── Admin ───────────────────────────────────────────────────────────────────

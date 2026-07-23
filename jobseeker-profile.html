@@ -102,9 +102,15 @@
                             </div>
                         </div>
                         
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Highest Qualification</label>
-                            <input type="text" id="qualification" class="form-control form-control-custom" placeholder="Example: B.Tech CSE, Diploma ME" required>
+                        <div class="row g-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Highest Qualification</label>
+                                <input type="text" id="qualification" class="form-control form-control-custom" placeholder="Example: B.Tech CSE, Diploma ME" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Cumulative CGPA / Score</label>
+                                <input type="text" id="cgpa" class="form-control form-control-custom" placeholder="Example: 8.5 CGPA or 85%" required>
+                            </div>
                         </div>
                         
                         <div class="mb-4">
@@ -170,6 +176,7 @@
                     name: user.name || capName,
                     email: user.email,
                     qualification: 'B.Tech Computer Science',
+                    cgpa: '8.5',
                     skills: 'JavaScript, React, Node.js, HTML5, CSS3, MongoDB'
                 };
             }
@@ -178,6 +185,7 @@
             document.getElementById('name').value = seeker.name || user.name || '';
             document.getElementById('email').value = seeker.email || user.email || '';
             document.getElementById('qualification').value = seeker.qualification || '';
+            document.getElementById('cgpa').value = seeker.cgpa || '';
             document.getElementById('skills').value = seeker.skills || '';
 
             if (seeker.photo) {
@@ -199,12 +207,14 @@
 
                 const name = document.getElementById('name').value.trim();
                 const qualification = document.getElementById('qualification').value.trim();
+                const cgpa = document.getElementById('cgpa').value.trim();
                 const skills = document.getElementById('skills').value.trim();
 
                 try {
                     const response = await API.profile.updateSeeker(user.email, { 
                         name, 
                         qualification, 
+                        cgpa,
                         skills, 
                         photo: photoBase64 
                     });

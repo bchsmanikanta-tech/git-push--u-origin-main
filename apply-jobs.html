@@ -109,18 +109,52 @@
                         <label class="form-label fw-semibold">CGPA</label>
                         <input type="number" step="0.01" min="0" max="10" id="cgpa" class="form-control form-control-custom" placeholder="e.g., 8.5" required>
                     </div>
-                    
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold mb-2 d-block">Do you have a Certification?</label>
-                        <div class="d-flex gap-4 align-items-center mt-2 pt-1">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="hasCertification" id="cert-yes" value="yes">
-                                <label class="form-check-label text-slate-800" for="cert-yes">Yes</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="hasCertification" id="cert-no" value="no" checked>
-                                <label class="form-check-label text-slate-800" for="cert-no">No</label>
-                            </div>
+                        <label class="form-label fw-semibold">Highest Qualification</label>
+                        <select id="qualification" class="form-select form-control-custom" required>
+                            <option value="" disabled selected>Select highest degree...</option>
+                            <option value="High School">High School</option>
+                            <option value="Associate Degree">Associate Degree</option>
+                            <option value="Bachelor's Degree">Bachelor's Degree</option>
+                            <option value="Master's Degree">Master's Degree</option>
+                            <option value="Ph.D.">Ph.D.</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row fade-up-element" style="animation-delay: 0.32s;">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Years of Experience</label>
+                        <input type="number" step="0.1" min="0" id="experience-years" class="form-control form-control-custom" placeholder="e.g., 2.5" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Expected Salary (LPA)</label>
+                        <input type="number" step="0.1" min="0" id="expected-salary" class="form-control form-control-custom" placeholder="e.g., 8.5" required>
+                    </div>
+                </div>
+
+                <div class="row fade-up-element" style="animation-delay: 0.34s;">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">GitHub Profile URL</label>
+                        <input type="url" id="github-profile" class="form-control form-control-custom" placeholder="https://github.com/username">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">LinkedIn Profile URL</label>
+                        <input type="url" id="linkedin-profile" class="form-control form-control-custom" placeholder="https://linkedin.com/in/username">
+                    </div>
+                </div>
+
+                <div class="mb-3 fade-up-element" style="animation-delay: 0.36s;">
+                    <label class="form-label fw-semibold mb-2 d-block">Do you have a Certification?</label>
+                    <div class="d-flex gap-4 align-items-center mt-2 pt-1">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="hasCertification" id="cert-yes" value="yes">
+                            <label class="form-check-label text-slate-800" for="cert-yes">Yes</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="hasCertification" id="cert-no" value="no" checked>
+                            <label class="form-check-label text-slate-800" for="cert-no">No</label>
                         </div>
                     </div>
                 </div>
@@ -197,6 +231,33 @@
                 document.getElementById('job-title').value = jobDetails.title;
                 document.getElementById('full-name').value = seekerProfile.name;
                 document.getElementById('email').value = seekerProfile.email;
+                if (seekerProfile.cgpa) {
+                    document.getElementById('cgpa').value = seekerProfile.cgpa;
+                }
+
+                // Pre-fill qualification from profile if available
+                if (seekerProfile.qualification) {
+                    const qualSelect = document.getElementById('qualification');
+                    const options = Array.from(qualSelect.options).map(o => o.value);
+                    if (options.includes(seekerProfile.qualification)) {
+                        qualSelect.value = seekerProfile.qualification;
+                    } else {
+                        const lowQual = seekerProfile.qualification.toLowerCase();
+                        if (lowQual.includes('bachelor') || lowQual.includes('btech') || lowQual.includes('b.e') || lowQual.includes('degree') || lowQual.includes('graduat')) {
+                            qualSelect.value = "Bachelor's Degree";
+                        } else if (lowQual.includes('master') || lowQual.includes('mtech') || lowQual.includes('m.e') || lowQual.includes('mba') || lowQual.includes('post grad')) {
+                            qualSelect.value = "Master's Degree";
+                        } else if (lowQual.includes('phd') || lowQual.includes('doctor')) {
+                            qualSelect.value = "Ph.D.";
+                        } else if (lowQual.includes('diploma') || lowQual.includes('associate')) {
+                            qualSelect.value = "Associate Degree";
+                        } else if (lowQual.includes('school') || lowQual.includes('ssc') || lowQual.includes('hsc') || lowQual.includes('inter')) {
+                            qualSelect.value = "High School";
+                        } else {
+                            qualSelect.value = "Other";
+                        }
+                    }
+                }
 
                 // Handle default/uploaded resume checklist
                 const useExistingWrapper = document.getElementById('use-existing-resume-wrapper');
@@ -263,6 +324,11 @@
                 const addressVal = document.getElementById('address').value.trim();
                 const cityVal = document.getElementById('city').value.trim();
                 const stateVal = document.getElementById('state').value.trim();
+                const qualVal = document.getElementById('qualification').value;
+                const expVal = document.getElementById('experience-years').value.trim();
+                const salVal = document.getElementById('expected-salary').value.trim();
+                const githubVal = document.getElementById('github-profile').value.trim();
+                const linkedinVal = document.getElementById('linkedin-profile').value.trim();
 
                 let finalResumeFilename = seekerProfile.resume || '';
                 let certificationUrl = '';
@@ -308,7 +374,12 @@
                         certification: certificationUrl,
                         address: addressVal,
                         city: cityVal,
-                        state: stateVal
+                        state: stateVal,
+                        githubProfile: githubVal,
+                        linkedinProfile: linkedinVal,
+                        experienceYears: expVal,
+                        qualification: qualVal,
+                        expectedSalary: salVal
                     };
 
                     const response = await API.applications.submit(appData);

@@ -78,14 +78,40 @@
         <div class="modal-dialog">
             <div class="modal-content" style="border-radius: 16px;">
                 <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold" id="letterModalLabel">Candidate Cover Letter</h5>
+                    <h5 class="modal-title fw-bold" id="letterModalLabel">Candidate Details & Cover Letter</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
                     <p class="text-secondary small mb-1">Submitted by: <strong id="letter-candidate" class="text-dark">Candidate</strong></p>
                     <p class="text-secondary small mb-1" id="candidate-address-wrapper">Address: <strong id="letter-address" class="text-dark">-</strong></p>
-                    <hr class="mt-1 mb-3 text-slate-200">
-                    <p class="text-slate-800 lh-lg" style="white-space: pre-wrap;" id="letter-content">
+                    
+                    <!-- New Professional Details Section -->
+                    <div class="card bg-light border-0 rounded-3 p-3 my-3">
+                        <h6 class="fw-bold text-success mb-2" style="font-size: 14px;"><i class="bi bi-briefcase me-2"></i>Professional Details</h6>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <span class="text-secondary d-block" style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">HIGHEST DEGREE</span>
+                                <strong id="letter-qualification" class="text-dark" style="font-size: 13px;">-</strong>
+                            </div>
+                            <div class="col-6">
+                                <span class="text-secondary d-block" style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">EXPERIENCE</span>
+                                <strong id="letter-experience" class="text-dark" style="font-size: 13px;">-</strong>
+                            </div>
+                            <div class="col-6 mt-2">
+                                <span class="text-secondary d-block" style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">EXPECTED SALARY</span>
+                                <strong id="letter-expected-salary" class="text-dark" style="font-size: 13px;">-</strong>
+                            </div>
+                            <div class="col-6 mt-2 text-truncate">
+                                <span class="text-secondary d-block" style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">PROFESSIONAL LINKS</span>
+                                <div id="letter-links" class="d-flex gap-2 mt-1">
+                                    <!-- Dynamic link buttons -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-success mb-1" style="font-size: 14px;"><i class="bi bi-chat-left-text me-2"></i>Cover Letter</h6>
+                    <p class="text-slate-800 lh-lg" style="white-space: pre-wrap; font-size: 13.5px;" id="letter-content">
                         No letter contents details.
                     </p>
                 </div>
@@ -445,7 +471,36 @@
                     fullAddress = [app.city, app.state].filter(Boolean).join(', ');
                 }
                 document.getElementById('letter-address').innerText = fullAddress;
-                document.getElementById('letter-content').innerText = app.coverLetter;
+                document.getElementById('letter-content').innerText = app.coverLetter || 'No cover letter provided.';
+
+                // New fields binding
+                document.getElementById('letter-qualification').innerText = app.qualification || 'Not Specified';
+                document.getElementById('letter-experience').innerText = app.experienceYears ? `${app.experienceYears} Years` : 'Not Specified';
+                document.getElementById('letter-expected-salary').innerText = app.expectedSalary ? `${app.expectedSalary} LPA` : 'Not Specified';
+
+                const linksBox = document.getElementById('letter-links');
+                linksBox.innerHTML = '';
+                if (app.githubProfile) {
+                    const gh = document.createElement('a');
+                    gh.href = app.githubProfile;
+                    gh.target = '_blank';
+                    gh.className = 'btn btn-xs btn-outline-dark px-2 py-0 rounded-pill d-inline-flex align-items-center gap-1';
+                    gh.style.fontSize = '11px';
+                    gh.innerHTML = '<i class="bi bi-github"></i> GitHub';
+                    linksBox.appendChild(gh);
+                }
+                if (app.linkedinProfile) {
+                    const li = document.createElement('a');
+                    li.href = app.linkedinProfile;
+                    li.target = '_blank';
+                    li.className = 'btn btn-xs btn-outline-primary px-2 py-0 rounded-pill d-inline-flex align-items-center gap-1';
+                    li.style.fontSize = '11px';
+                    li.innerHTML = '<i class="bi bi-linkedin"></i> LinkedIn';
+                    linksBox.appendChild(li);
+                }
+                if (!app.githubProfile && !app.linkedinProfile) {
+                    linksBox.innerHTML = '<span class="text-secondary small">-</span>';
+                }
 
                 const letterModal = new bootstrap.Modal(document.getElementById('letterModal'));
                 letterModal.show();

@@ -1226,6 +1226,16 @@ aside.admin-sidebar {
     margin: 0 !important;
 }
 
+.admin-nav,
+nav.admin-nav {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    position: static !important;
+}
+
 .nav-section-title {
     color: #94a3b8 !important;
     font-size: 11px !important;

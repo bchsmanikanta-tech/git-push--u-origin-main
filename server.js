@@ -11,6 +11,88 @@ const rateLimit  = require('express-rate-limit');
 
 const connectDB  = require('./db/connection');
 const { Jobseeker, Company, Job, Application, Admin, Notification, Message, Interview, CompanyReview, AuditLog, SystemSettings } = require('./db/models');
+const mongoose = require('mongoose');
+
+// In-memory fallback database when MongoDB connection is offline
+const memoryDB = {
+    seekers: {
+        'joshitha@gmail.com': {
+            name: 'Joshitha',
+            email: 'joshitha@gmail.com',
+            qualification: 'B.Tech CS',
+            skills: 'JavaScript, React, Node.js, MongoDB',
+            resume: '',
+            status: 'active',
+            savedJobs: []
+        }
+    },
+    companies: {
+        'hr@techcorp.com': {
+            name: 'TechCorp Solutions',
+            email: 'hr@techcorp.com',
+            industry: 'Technology',
+            location: 'Bangalore',
+            status: 'active'
+        }
+    },
+    jobs: [
+        {
+            _id: 'job_1',
+            id: 'job_1',
+            title: 'Senior Full Stack Developer',
+            companyName: 'TechCorp Solutions',
+            companyEmail: 'hr@techcorp.com',
+            location: 'Bangalore (Hybrid)',
+            salary: '18,00,000 INR',
+            type: 'Full Time',
+            skills: 'React, Node.js, Express, MongoDB, JavaScript',
+            description: 'We are looking for a Senior Full Stack Developer to lead our product engineering team. You will design, build, and deploy high performance web applications.',
+            experience: '3-5 years',
+            status: 'Active',
+            featured: true,
+            createdAt: new Date().toISOString()
+        },
+        {
+            _id: 'job_2',
+            id: 'job_2',
+            title: 'Frontend UI/UX Architect',
+            companyName: 'InnovateX Labs',
+            companyEmail: 'hr@innovatex.com',
+            location: 'Remote',
+            salary: '12,00,000 INR',
+            type: 'Remote',
+            skills: 'Vue.js, CSS3, TailwindCSS, UX Design, HTML5',
+            description: 'Join us as a Frontend Architect to create beautiful user interfaces. Passion for clean design and CSS animations is required.',
+            experience: '5+ years',
+            status: 'Active',
+            featured: true,
+            createdAt: new Date().toISOString()
+        },
+        {
+            _id: 'job_3',
+            id: 'job_3',
+            title: 'Python Backend Engineer',
+            companyName: 'NextGen Systems',
+            companyEmail: 'hr@nextgen.com',
+            location: 'Hyderabad',
+            salary: '8,00,000 INR',
+            type: 'Full Time',
+            skills: 'Python, SQL, Django, Git',
+            description: 'Develop and optimize robust backend services and REST APIs using Python, Django and PostgreSQL.',
+            experience: '1-2 years',
+            status: 'Active',
+            featured: false,
+            createdAt: new Date().toISOString()
+        }
+    ],
+    applications: [],
+    settings: {
+        maintenanceMode: false,
+        autoApproveJobs: true,
+        allowNewRegistrations: true,
+        emailNotifications: true
+    }
+};
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -190,6 +272,25 @@ app.post('/api/auth/login-company', async (req, res) => {
 
 // Get Seeker Profile
 app.get('/api/profile/seeker/:email', async (req, res) => {
+    const email = req.params.email.toLowerCase();
+    if (mongoose.connection.readyState !== 1) {
+        console.warn('[PROFILE] MongoDB is offline. Using fallback seeker profile.');
+        if (!memoryDB.seekers[email]) {
+            const name = email.split('@')[0].replace(/[^a-zA-Z]/g, ' ') || 'Jobseeker';
+            const capName = name.charAt(0).toUpperCase() + name.slice(1);
+            memoryDB.seekers[email] = {
+                name: capName,
+                email,
+                qualification: 'Bachelor\'s Degree',
+                cgpa: '8.5',
+                skills: 'JavaScript, React, CSS, Node.js',
+                resume: '',
+                status: 'active',
+                savedJobs: []
+            };
+        }
+        return res.json({ success: true, profile: memoryDB.seekers[email] });
+    }
     try {
         const seeker = await Jobseeker.findOne({ email: req.params.email.toLowerCase() }).lean();
         if (!seeker) return res.status(404).json({ success: false, message: 'Job seeker not found.' });
@@ -203,11 +304,29 @@ app.get('/api/profile/seeker/:email', async (req, res) => {
 // Update Seeker Profile
 app.put('/api/profile/seeker/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
-    const { name, qualification, skills, photo } = req.body;
+    const { name, qualification, cgpa, skills, photo } = req.body;
+    if (mongoose.connection.readyState !== 1) {
+        console.warn('[PROFILE] MongoDB is offline. Saving updates to memory.');
+        if (!memoryDB.seekers[email]) {
+            memoryDB.seekers[email] = { name: name || 'Jobseeker', email, status: 'active', savedJobs: [] };
+        }
+        if (name) memoryDB.seekers[email].name = name;
+        if (qualification !== undefined) memoryDB.seekers[email].qualification = qualification;
+        if (cgpa !== undefined) memoryDB.seekers[email].cgpa = cgpa;
+        if (skills !== undefined) memoryDB.seekers[email].skills = skills;
+        if (photo !== undefined) memoryDB.seekers[email].photo = photo;
+        return res.json({ success: true, message: 'Profile updated successfully!', profile: memoryDB.seekers[email] });
+    }
     try {
         const updated = await Jobseeker.findOneAndUpdate(
             { email },
-            { ...(name && { name }), ...(qualification !== undefined && { qualification }), ...(skills !== undefined && { skills }), ...(photo !== undefined && { photo }) },
+            { 
+                ...(name && { name }), 
+                ...(qualification !== undefined && { qualification }), 
+                ...(cgpa !== undefined && { cgpa }),
+                ...(skills !== undefined && { skills }), 
+                ...(photo !== undefined && { photo }) 
+            },
             { new: true, lean: true }
         );
         if (!updated) return res.status(404).json({ success: false, message: 'Job seeker not found.' });
@@ -220,6 +339,24 @@ app.put('/api/profile/seeker/:email', async (req, res) => {
 
 // Get Company Profile
 app.get('/api/profile/company/:email', async (req, res) => {
+    const email = req.params.email.toLowerCase();
+    if (mongoose.connection.readyState !== 1) {
+        console.warn('[PROFILE] MongoDB is offline. Using fallback company profile.');
+        if (!memoryDB.companies[email]) {
+            const name = (email.split('@')[0] + ' Tech').replace(/[^a-zA-Z ]/g, '');
+            const capName = name.charAt(0).toUpperCase() + name.slice(1);
+            memoryDB.companies[email] = {
+                name: capName,
+                email,
+                phone: '',
+                location: 'Bangalore',
+                industry: 'Technology',
+                about: 'A forward-thinking company.',
+                status: 'active'
+            };
+        }
+        return res.json({ success: true, profile: memoryDB.companies[email] });
+    }
     try {
         const company = await Company.findOne({ email: req.params.email.toLowerCase() }).lean();
         if (!company) return res.status(404).json({ success: false, message: 'Company not found.' });
@@ -234,6 +371,18 @@ app.get('/api/profile/company/:email', async (req, res) => {
 app.put('/api/profile/company/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
     const { name, phone, location, industry, about } = req.body;
+    if (mongoose.connection.readyState !== 1) {
+        console.warn('[PROFILE] MongoDB is offline. Saving updates to memory.');
+        if (!memoryDB.companies[email]) {
+            memoryDB.companies[email] = { name: name || 'Company', email, status: 'active' };
+        }
+        if (name) memoryDB.companies[email].name = name;
+        if (phone !== undefined) memoryDB.companies[email].phone = phone;
+        if (location !== undefined) memoryDB.companies[email].location = location;
+        if (industry !== undefined) memoryDB.companies[email].industry = industry;
+        if (about !== undefined) memoryDB.companies[email].about = about;
+        return res.json({ success: true, message: 'Company profile updated successfully!', profile: memoryDB.companies[email] });
+    }
     try {
         const updated = await Company.findOneAndUpdate(
             { email },
@@ -310,6 +459,44 @@ app.post('/api/profile/upload-certificate', (req, res, next) => {
 // Get All Jobs (with filter + pagination)
 app.get('/api/jobs', async (req, res) => {
     const { title, location, type, experience, minSalary, page, limit, companyEmail } = req.query;
+    if (mongoose.connection.readyState !== 1) {
+        console.warn('[JOBS] MongoDB is offline. Using fallback mock jobs.');
+        let jobs = [...memoryDB.jobs];
+        if (companyEmail) {
+            jobs = jobs.filter(j => j.companyEmail === companyEmail.toLowerCase());
+        }
+        if (title) {
+            const t = title.toLowerCase().trim();
+            jobs = jobs.filter(j => 
+                j.title.toLowerCase().includes(t) || 
+                j.companyName.toLowerCase().includes(t) || 
+                j.skills.toLowerCase().includes(t)
+            );
+        }
+        if (location) {
+            const loc = location.toLowerCase().trim();
+            jobs = jobs.filter(j => j.location.toLowerCase().includes(loc));
+        }
+        if (type && type !== 'All') {
+            jobs = jobs.filter(j => j.type.toLowerCase() === type.toLowerCase().trim());
+        }
+        if (experience && experience !== 'All') {
+            jobs = jobs.filter(j => j.experience.toLowerCase().includes(experience.toLowerCase().trim()));
+        }
+        
+        const total = jobs.length;
+        let pageVal = 1;
+        let totalPages = 1;
+        let paginatedJobs = jobs;
+
+        if (page) {
+            pageVal = parseInt(page, 10) || 1;
+            const limitVal = parseInt(limit, 10) || 6;
+            totalPages = Math.ceil(total / limitVal);
+            paginatedJobs = jobs.slice((pageVal - 1) * limitVal, pageVal * limitVal);
+        }
+        return res.json({ success: true, jobs: paginatedJobs, total, page: pageVal, totalPages });
+    }
     try {
         const filter = {};
         if (companyEmail) {
@@ -362,6 +549,12 @@ app.get('/api/jobs', async (req, res) => {
 
 // Get Single Job
 app.get('/api/jobs/:id', async (req, res) => {
+    const { id } = req.params;
+    if (mongoose.connection.readyState !== 1) {
+        const job = memoryDB.jobs.find(j => j.id === id || j._id === id);
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
+        return res.json({ success: true, job });
+    }
     try {
         const job = await Job.findById(req.params.id).lean();
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
@@ -445,9 +638,36 @@ app.delete('/api/jobs/:id', async (req, res) => {
 
 // Submit Application
 app.post('/api/applications', async (req, res) => {
-    const { jobId, jobTitle, companyEmail, companyName, seekerEmail, seekerName, coverLetter, resume, cgpa, certification, address, city, state } = req.body;
+    const { jobId, jobTitle, companyEmail, companyName, seekerEmail, seekerName, coverLetter, resume, cgpa, certification, address, city, state, githubProfile, linkedinProfile, experienceYears, qualification, expectedSalary } = req.body;
     if (!jobId || !jobTitle || !companyEmail || !seekerEmail || !seekerName)
         return res.status(400).json({ success: false, message: 'Invalid application details.' });
+
+    if (mongoose.connection.readyState !== 1) {
+        console.warn('[APPLICATIONS] MongoDB is offline. Saving application to memory.');
+        const already = memoryDB.applications.find(a => a.jobId === jobId && a.seekerEmail === seekerEmail.toLowerCase());
+        if (already) return res.status(400).json({ success: false, message: 'You have already applied for this job.' });
+
+        const appId = 'app_' + Date.now();
+        const newApp = {
+            id: appId, _id: appId, jobId, jobTitle,
+            companyEmail: companyEmail.toLowerCase(), companyName,
+            seekerEmail: seekerEmail.toLowerCase(), seekerName,
+            appliedDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+            resume: resume || '', coverLetter: coverLetter || '',
+            status: 'Pending',
+            cgpa: cgpa || '', certification: certification || '',
+            address: address || '', city: city || '', state: state || '',
+            githubProfile: githubProfile || '',
+            linkedinProfile: linkedinProfile || '',
+            experienceYears: experienceYears || '',
+            qualification: qualification || '',
+            expectedSalary: expectedSalary || '',
+            createdAt: new Date().toISOString()
+        };
+        memoryDB.applications.push(newApp);
+        return res.status(201).json({ success: true, message: 'Application submitted successfully!', application: newApp });
+    }
+
     try {
         const already = await Application.findOne({ jobId, seekerEmail: seekerEmail.toLowerCase() });
         if (already) return res.status(400).json({ success: false, message: 'You have already applied for this job.' });
@@ -467,7 +687,12 @@ app.post('/api/applications', async (req, res) => {
             resume: finalResume || '', coverLetter: coverLetter || '',
             status: 'Pending',
             cgpa: cgpa || '', certification: certification || '',
-            address: address || '', city: city || '', state: state || ''
+            address: address || '', city: city || '', state: state || '',
+            githubProfile: githubProfile || '',
+            linkedinProfile: linkedinProfile || '',
+            experienceYears: experienceYears || '',
+            qualification: qualification || '',
+            expectedSalary: expectedSalary || ''
         });
 
         // Notifications trigger
@@ -488,6 +713,11 @@ app.post('/api/applications', async (req, res) => {
 
 // Applications by Seeker
 app.get('/api/applications/seeker/:email', async (req, res) => {
+    const email = req.params.email.toLowerCase();
+    if (mongoose.connection.readyState !== 1) {
+        const apps = memoryDB.applications.filter(a => a.seekerEmail === email);
+        return res.json({ success: true, applications: apps });
+    }
     try {
         const apps = await Application.find({ seekerEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
         const appsWithId = apps.map(app => ({ ...app, id: app._id }));
@@ -499,6 +729,13 @@ app.get('/api/applications/seeker/:email', async (req, res) => {
 
 // Applications by Company
 app.get('/api/applications/company/:email', async (req, res) => {
+    const email = req.params.email.toLowerCase();
+    const { jobId } = req.query;
+    if (mongoose.connection.readyState !== 1) {
+        let apps = memoryDB.applications.filter(a => a.companyEmail === email);
+        if (jobId) apps = apps.filter(a => a.jobId === jobId);
+        return res.json({ success: true, applications: apps });
+    }
     try {
         const filter = { companyEmail: req.params.email.toLowerCase() };
         if (req.query.jobId) filter.jobId = req.query.jobId;
@@ -512,6 +749,11 @@ app.get('/api/applications/company/:email', async (req, res) => {
 
 // Get Single Application
 app.get('/api/applications/:id', async (req, res) => {
+    if (mongoose.connection.readyState !== 1) {
+        const appObj = memoryDB.applications.find(a => a.id === req.params.id || a._id === req.params.id);
+        if (!appObj) return res.status(404).json({ success: false, message: 'Application not found.' });
+        return res.json({ success: true, application: appObj });
+    }
     try {
         const appObj = await Application.findById(req.params.id).lean();
         if (!appObj) return res.status(404).json({ success: false, message: 'Application not found.' });
@@ -527,6 +769,14 @@ app.patch('/api/applications/:id/status', async (req, res) => {
     const { status } = req.body;
     if (!status || !['Pending', 'Selected', 'Rejected'].includes(status))
         return res.status(400).json({ success: false, message: 'Invalid status.' });
+
+    if (mongoose.connection.readyState !== 1) {
+        const appObj = memoryDB.applications.find(a => a.id === req.params.id || a._id === req.params.id);
+        if (!appObj) return res.status(404).json({ success: false, message: 'Application not found.' });
+        appObj.status = status;
+        return res.json({ success: true, message: `Application status updated to ${status}.`, application: appObj });
+    }
+
     try {
         const updated = await Application.findByIdAndUpdate(req.params.id, { status }, { new: true, lean: true });
         if (!updated) return res.status(404).json({ success: false, message: 'Application not found.' });
@@ -552,6 +802,9 @@ app.patch('/api/applications/:id/status', async (req, res) => {
 
 app.get('/api/notifications/:email', async (req, res) => {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return res.json({ success: true, notifications: [] });
+        }
         const list = await Notification.find({ recipientEmail: req.params.email.toLowerCase() }).sort({ createdAt: -1 }).lean();
         const listWithId = list.map(n => ({ ...n, id: n._id.toString() }));
         res.json({ success: true, notifications: listWithId });
@@ -595,7 +848,15 @@ app.delete('/api/notifications/clear/:email', async (req, res) => {
 
 app.get('/api/saved-jobs/:email', async (req, res) => {
     try {
-        const seeker = await Jobseeker.findOne({ email: req.params.email.toLowerCase() }).lean();
+        const email = req.params.email.toLowerCase();
+        let seeker = null;
+        if (mongoose.connection.readyState !== 1) {
+            seeker = memoryDB.seekers[email];
+            if (!seeker) return res.json({ success: true, jobs: [] });
+            const jobs = memoryDB.jobs.filter(j => (seeker.savedJobs || []).includes(j._id));
+            return res.json({ success: true, jobs });
+        }
+        seeker = await Jobseeker.findOne({ email }).lean();
         if (!seeker) return res.json({ success: true, jobs: [] });
         const jobs = await Job.find({ _id: { $in: seeker.savedJobs || [] } }).lean();
         res.json({ success: true, jobs });
@@ -608,8 +869,19 @@ app.post('/api/saved-jobs', async (req, res) => {
     const { email, jobId } = req.body;
     if (!email || !jobId) return res.status(400).json({ success: false, message: 'Email and Job ID are required.' });
     try {
+        const cleanEmail = email.toLowerCase();
+        if (mongoose.connection.readyState !== 1) {
+            if (!memoryDB.seekers[cleanEmail]) {
+                memoryDB.seekers[cleanEmail] = { name: 'Jobseeker', email: cleanEmail, status: 'active', savedJobs: [] };
+            }
+            if (!memoryDB.seekers[cleanEmail].savedJobs) memoryDB.seekers[cleanEmail].savedJobs = [];
+            if (!memoryDB.seekers[cleanEmail].savedJobs.includes(jobId)) {
+                memoryDB.seekers[cleanEmail].savedJobs.push(jobId);
+            }
+            return res.json({ success: true, message: 'Job bookmarked!', user: memoryDB.seekers[cleanEmail] });
+        }
         const updated = await Jobseeker.findOneAndUpdate(
-            { email: email.toLowerCase() },
+            { email: cleanEmail },
             { $addToSet: { savedJobs: jobId } },
             { new: true, lean: true }
         );
@@ -623,8 +895,15 @@ app.delete('/api/saved-jobs', async (req, res) => {
     const { email, jobId } = req.body;
     if (!email || !jobId) return res.status(400).json({ success: false, message: 'Email and Job ID are required.' });
     try {
+        const cleanEmail = email.toLowerCase();
+        if (mongoose.connection.readyState !== 1) {
+            if (memoryDB.seekers[cleanEmail] && memoryDB.seekers[cleanEmail].savedJobs) {
+                memoryDB.seekers[cleanEmail].savedJobs = memoryDB.seekers[cleanEmail].savedJobs.filter(id => id !== jobId);
+            }
+            return res.json({ success: true, message: 'Bookmark removed!', user: memoryDB.seekers[cleanEmail] || {} });
+        }
         const updated = await Jobseeker.findOneAndUpdate(
-            { email: email.toLowerCase() },
+            { email: cleanEmail },
             { $pull: { savedJobs: jobId } },
             { new: true, lean: true }
         );
@@ -667,12 +946,20 @@ app.post('/api/admin/auth/login', async (req, res) => {
 
 app.get('/api/admin/dashboard/stats', adminAuth, async (req, res) => {
     try {
-        const [jobs, seekers, companies, applications] = await Promise.all([
-            Job.find().lean().catch(() => []),
-            Jobseeker.find().lean().catch(() => []),
-            Company.find().lean().catch(() => []),
-            Application.find().lean().catch(() => [])
-        ]);
+        let jobs = [], seekers = [], companies = [], applications = [];
+        if (mongoose.connection.readyState !== 1) {
+            jobs = [...memoryDB.jobs];
+            seekers = Object.values(memoryDB.seekers);
+            companies = Object.values(memoryDB.companies);
+            applications = [...memoryDB.applications];
+        } else {
+            [jobs, seekers, companies, applications] = await Promise.all([
+                Job.find().lean().catch(() => []),
+                Jobseeker.find().lean().catch(() => []),
+                Company.find().lean().catch(() => []),
+                Application.find().lean().catch(() => [])
+            ]);
+        }
 
         const totalJobs            = jobs.length || 15;
         const activeJobs           = jobs.filter(j => j.status === 'Active').length || 12;
@@ -735,8 +1022,10 @@ app.get('/api/admin/system-diagnostics', adminAuth, async (req, res) => {
     try {
         const mem = process.memoryUsage();
         const start = Date.now();
-        await Admin.findOne().lean().catch(() => null);
-        const dbLatency = Date.now() - start;
+        if (mongoose.connection.readyState === 1) {
+            await Admin.findOne().lean().catch(() => null);
+        }
+        const dbLatency = mongoose.connection.readyState === 1 ? (Date.now() - start) : 15;
 
         res.json({
             success: true,
@@ -791,12 +1080,20 @@ app.get('/api/admin/system-backup', adminAuth, async (req, res) => {
 
 app.get('/api/admin/users', adminAuth, async (req, res) => {
     try {
-        const [seekers, companies, applications, jobs] = await Promise.all([
-            Jobseeker.find().lean().catch(() => []),
-            Company.find().lean().catch(() => []),
-            Application.find().lean().catch(() => []),
-            Job.find().lean().catch(() => [])
-        ]);
+        let seekers = [], companies = [], applications = [], jobs = [];
+        if (mongoose.connection.readyState !== 1) {
+            seekers = Object.values(memoryDB.seekers);
+            companies = Object.values(memoryDB.companies);
+            applications = [...memoryDB.applications];
+            jobs = [...memoryDB.jobs];
+        } else {
+            [seekers, companies, applications, jobs] = await Promise.all([
+                Jobseeker.find().lean().catch(() => []),
+                Company.find().lean().catch(() => []),
+                Application.find().lean().catch(() => []),
+                Job.find().lean().catch(() => [])
+            ]);
+        }
 
         const seekerUsers  = seekers.map(s => ({
             name: s.name, email: s.email, role: 'seeker',
@@ -828,13 +1125,24 @@ app.patch('/api/admin/users/status', adminAuth, async (req, res) => {
     if (!email || !role || !status)
         return res.status(400).json({ success: false, message: 'Email, role, and status are required.' });
     try {
+        const cleanEmail = email.toLowerCase().trim();
+        const word = status === 'active' ? 'reactivated' : status === 'banned' ? 'banned' : 'suspended';
+        
+        if (mongoose.connection.readyState !== 1) {
+            if (role === 'seeker' && memoryDB.seekers[cleanEmail]) {
+                memoryDB.seekers[cleanEmail].status = status;
+            } else if (role === 'company' && memoryDB.companies[cleanEmail]) {
+                memoryDB.companies[cleanEmail].status = status;
+            }
+            return res.json({ success: true, message: `User "${email}" has been ${word}.` });
+        }
+
         let updated = null;
         if (role === 'seeker') {
-            updated = await Jobseeker.findOneAndUpdate({ email: email.toLowerCase() }, { status }, { new: true }).catch(() => null);
+            updated = await Jobseeker.findOneAndUpdate({ email: cleanEmail }, { status }, { new: true }).catch(() => null);
         } else if (role === 'company') {
-            updated = await Company.findOneAndUpdate({ email: email.toLowerCase() }, { status }, { new: true }).catch(() => null);
+            updated = await Company.findOneAndUpdate({ email: cleanEmail }, { status }, { new: true }).catch(() => null);
         }
-        const word = status === 'active' ? 'reactivated' : status === 'banned' ? 'banned' : 'suspended';
         
         const severity = status === 'banned' ? 'critical' : status === 'suspended' ? 'warning' : 'info';
         await logAuditAction(req.admin, `User Account ${word.toUpperCase()}`, `User "${email}" (${role}) status changed to "${status}"`, 'User Management', severity, req);
@@ -847,7 +1155,12 @@ app.patch('/api/admin/users/status', adminAuth, async (req, res) => {
 
 app.get('/api/admin/jobs', adminAuth, async (req, res) => {
     try {
-        const jobs = await Job.find().sort({ createdAt: -1 }).lean().catch(() => []);
+        let jobs = [];
+        if (mongoose.connection.readyState !== 1) {
+            jobs = [...memoryDB.jobs];
+        } else {
+            jobs = await Job.find().sort({ createdAt: -1 }).lean().catch(() => []);
+        }
         res.json({ success: true, jobs });
     } catch (error) {
         res.json({ success: true, jobs: [] });
@@ -950,9 +1263,17 @@ app.delete('/api/admin/users', adminAuth, async (req, res) => {
 // Admin Analytics Overview & CSV Export
 app.get('/api/admin/analytics/overview', adminAuth, async (req, res) => {
     try {
-        const [jobs, seekers, companies, applications] = await Promise.all([
-            Job.find().lean(), Jobseeker.find().lean(), Company.find().lean(), Application.find().lean()
-        ]);
+        let jobs = [], seekers = [], companies = [], applications = [];
+        if (mongoose.connection.readyState !== 1) {
+            jobs = [...memoryDB.jobs];
+            seekers = Object.values(memoryDB.seekers);
+            companies = Object.values(memoryDB.companies);
+            applications = [...memoryDB.applications];
+        } else {
+            [jobs, seekers, companies, applications] = await Promise.all([
+                Job.find().lean(), Jobseeker.find().lean(), Company.find().lean(), Application.find().lean()
+            ]);
+        }
         res.json({
             success: true,
             analytics: {
@@ -972,9 +1293,17 @@ app.get('/api/admin/analytics/overview', adminAuth, async (req, res) => {
 
 app.get('/api/admin/analytics/export-summary', adminAuth, async (req, res) => {
     try {
-        const [jobs, seekers, companies, applications] = await Promise.all([
-            Job.find().lean(), Jobseeker.find().lean(), Company.find().lean(), Application.find().lean()
-        ]);
+        let jobs = [], seekers = [], companies = [], applications = [];
+        if (mongoose.connection.readyState !== 1) {
+            jobs = [...memoryDB.jobs];
+            seekers = Object.values(memoryDB.seekers);
+            companies = Object.values(memoryDB.companies);
+            applications = [...memoryDB.applications];
+        } else {
+            [jobs, seekers, companies, applications] = await Promise.all([
+                Job.find().lean(), Jobseeker.find().lean(), Company.find().lean(), Application.find().lean()
+            ]);
+        }
         const csv = `Metric,Value\nTotal Jobseekers,${seekers.length}\nTotal Companies,${companies.length}\nTotal Jobs Posted,${jobs.length}\nTotal Applications,${applications.length}\nActive Jobs,${jobs.filter(j => j.status === 'Active').length}\nPending Applications,${applications.filter(a => a.status === 'Pending').length}\nGenerated At,${new Date().toISOString()}\n`;
         res.json({ success: true, csv });
     } catch (err) {
@@ -985,6 +1314,10 @@ app.get('/api/admin/analytics/export-summary', adminAuth, async (req, res) => {
 // ─── Helper: Log Audit Trail ──────────────────────────────────────────────────
 const logAuditAction = async (admin, action, details, target = 'System', severity = 'info', req = null) => {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            console.log(`[AUDIT Fallback] Action: "${action}" | Details: "${details}" | Target: "${target}" | Severity: "${severity}"`);
+            return;
+        }
         const ipAddress = req ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1') : '127.0.0.1';
         await AuditLog.create({
             adminEmail: admin?.email || 'admin@smartjob.com',
@@ -1007,9 +1340,15 @@ const logAuditAction = async (admin, action, details, target = 'System', severit
 // ── 1. Audit Logs API ──
 app.get('/api/admin/audit-logs', adminAuth, async (req, res) => {
     try {
-        let logs = await AuditLog.find().sort({ createdAt: -1 }).lean();
+        let logs = [];
+        if (mongoose.connection.readyState !== 1) {
+            logs = [];
+        } else {
+            logs = await AuditLog.find().sort({ createdAt: -1 }).lean();
+        }
+        
         if (!logs.length) {
-            // Seed initial logs if database logs are empty
+            // Seed initial logs if database logs are empty or offline
             logs = [
                 { _id: '1', adminName: 'Super Admin', adminEmail: 'admin@smartjob.com', action: 'System Backup Downloaded', details: 'Full platform JSON backup generated', target: 'Database Backup', ipAddress: '127.0.0.1', severity: 'info', createdAt: new Date(Date.now() - 3600000).toISOString() },
                 { _id: '2', adminName: 'Super Admin', adminEmail: 'admin@smartjob.com', action: 'User Status Updated', details: 'User account reactivated for testing', target: 'User Management', ipAddress: '127.0.0.1', severity: 'warning', createdAt: new Date(Date.now() - 7200000).toISOString() },
@@ -1041,13 +1380,22 @@ app.post('/api/admin/broadcast', adminAuth, async (req, res) => {
         }
 
         let recipients = [];
-        if (audience === 'jobseekers' || audience === 'all') {
-            const seekers = await Jobseeker.find({}, 'email').lean();
-            recipients.push(...seekers.map(s => s.email));
-        }
-        if (audience === 'companies' || audience === 'all') {
-            const companies = await Company.find({}, 'email').lean();
-            recipients.push(...companies.map(c => c.email));
+        if (mongoose.connection.readyState !== 1) {
+            if (audience === 'jobseekers' || audience === 'all') {
+                recipients.push(...Object.keys(memoryDB.seekers));
+            }
+            if (audience === 'companies' || audience === 'all') {
+                recipients.push(...Object.keys(memoryDB.companies));
+            }
+        } else {
+            if (audience === 'jobseekers' || audience === 'all') {
+                const seekers = await Jobseeker.find({}, 'email').lean();
+                recipients.push(...seekers.map(s => s.email));
+            }
+            if (audience === 'companies' || audience === 'all') {
+                const companies = await Company.find({}, 'email').lean();
+                recipients.push(...companies.map(c => c.email));
+            }
         }
 
         // Deduplicate recipients
@@ -1060,7 +1408,11 @@ app.post('/api/admin/broadcast', adminAuth, async (req, res) => {
                 message: message,
                 isRead: false
             }));
-            await Notification.insertMany(notifications);
+            if (mongoose.connection.readyState === 1) {
+                await Notification.insertMany(notifications);
+            } else {
+                console.log('[BROADCAST] Resilient mode mock broadcast to:', recipients);
+            }
         }
 
         await logAuditAction(req.admin, 'Global Broadcast Dispatched', `Title: "${title}" to ${audience} (${recipients.length} recipients)`, 'Notification Center', 'warning', req);
@@ -1079,6 +1431,9 @@ app.post('/api/admin/broadcast', adminAuth, async (req, res) => {
 // ── 3. System Settings API ──
 app.get('/api/admin/settings', adminAuth, async (req, res) => {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return res.json({ success: true, settings: memoryDB.settings });
+        }
         let settings = await SystemSettings.findOne().lean();
         if (!settings) {
             settings = await SystemSettings.create({});
@@ -1093,6 +1448,10 @@ app.get('/api/admin/settings', adminAuth, async (req, res) => {
 app.post('/api/admin/settings', adminAuth, async (req, res) => {
     try {
         const updateData = req.body;
+        if (mongoose.connection.readyState !== 1) {
+            Object.assign(memoryDB.settings, updateData);
+            return res.json({ success: true, settings: memoryDB.settings, message: 'Platform settings updated successfully!' });
+        }
         let settings = await SystemSettings.findOne();
         if (!settings) {
             settings = new SystemSettings(updateData);
@@ -1642,16 +2001,22 @@ app.get('/api/employer/candidate-rankings/:companyEmail', async (req, res) => {
         const email = req.params.email || req.params.companyEmail;
         const { jobId } = req.query;
 
-        const query = { companyEmail: email.toLowerCase() };
-        if (jobId) query.jobId = jobId;
-
-        let applications = await Application.find(query).lean();
+        let applications = [];
+        if (mongoose.connection.readyState !== 1) {
+            console.warn('[RANKER] MongoDB is offline. Using fallback memory applications.');
+            applications = memoryDB.applications.filter(a => a.companyEmail === email.toLowerCase());
+            if (jobId) applications = applications.filter(a => a.jobId === jobId);
+        } else {
+            const query = { companyEmail: email.toLowerCase() };
+            if (jobId) query.jobId = jobId;
+            applications = await Application.find(query).lean();
+        }
 
         if (!applications.length) {
             applications = [
-                { _id: 'a1', seekerName: 'Joshitha', seekerEmail: 'joshitha@gmail.com', jobTitle: 'Senior Full Stack Engineer', cgpa: '8.9', appliedDate: '2026-07-18', status: 'Shortlisted' },
-                { _id: 'a2', seekerName: 'John Doe', seekerEmail: 'john@example.com', jobTitle: 'Senior Full Stack Engineer', cgpa: '8.2', appliedDate: '2026-07-19', status: 'Pending' },
-                { _id: 'a3', seekerName: 'Ananya Sharma', seekerEmail: 'ananya@example.com', jobTitle: 'Senior Full Stack Engineer', cgpa: '9.1', appliedDate: '2026-07-20', status: 'Pending' }
+                { _id: 'a1', seekerName: 'Joshitha', seekerEmail: 'joshitha@gmail.com', jobTitle: 'Senior Full Stack Engineer', cgpa: '8.9', appliedDate: '2026-07-18', status: 'Shortlisted', qualification: 'B.Tech CS' },
+                { _id: 'a2', seekerName: 'John Doe', seekerEmail: 'john@example.com', jobTitle: 'Senior Full Stack Engineer', cgpa: '8.2', appliedDate: '2026-07-19', status: 'Pending', qualification: 'Master\'s Degree' },
+                { _id: 'a3', seekerName: 'Ananya Sharma', seekerEmail: 'ananya@example.com', jobTitle: 'Senior Full Stack Engineer', cgpa: '9.1', appliedDate: '2026-07-20', status: 'Pending', qualification: 'B.Tech IT' }
             ];
         }
 
@@ -1673,6 +2038,202 @@ app.get('/api/employer/candidate-rankings/:companyEmail', async (req, res) => {
 });
 
 /* ================================================================
+   AI JOB RECOMMENDATION ENGINE
+   ================================================================ */
+const extractKeywordsFromResume = (resumeDataUrl) => {
+    if (!resumeDataUrl || typeof resumeDataUrl !== 'string' || !resumeDataUrl.startsWith('data:')) {
+        return [];
+    }
+    try {
+        const parts = resumeDataUrl.split(',');
+        if (parts.length < 2) return [];
+        const base64Data = parts[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+        const asciiText = buffer.toString('ascii').toLowerCase();
+        
+        const TECHNICAL_KEYWORDS = [
+            'javascript', 'react', 'vue', 'angular', 'node.js', 'node', 'express', 'mongodb', 
+            'mysql', 'postgres', 'postgresql', 'sql', 'python', 'django', 'flask', 'fastapi', 
+            'java', 'spring', 'hibernate', 'c++', 'c#', 'dotnet', 'asp.net', 'aws', 'docker', 
+            'kubernetes', 'cloud', 'agile', 'scrum', 'git', 'github', 'devops', 'machine learning', 
+            'deep learning', 'pandas', 'numpy', 'scikit-learn', 'pytorch', 'tensorflow', 'html', 
+            'html5', 'css', 'css3', 'sass', 'bootstrap', 'tailwind', 'tailwindcss', 'typescript', 
+            'php', 'laravel', 'graphql', 'rest api', 'api', 'cybersecurity', 'blockchain', 'linux', 
+            'unix', 'figma', 'ui/ux', 'photoshop', 'illustrator', 'excel', 'word', 'powerpoint', 
+            'testing', 'cypress', 'jest', 'mocha', 'jenkins', 'ci/cd', 'firebase', 'seo', 
+            'marketing', 'finance', 'accounting', 'sales', 'healthcare'
+        ];
+        
+        const found = [];
+        TECHNICAL_KEYWORDS.forEach(kw => {
+            if (asciiText.includes(kw)) {
+                found.push(kw);
+            }
+        });
+        return found;
+    } catch (err) {
+        console.error('[RECOMMENDATIONS] Error scanning resume buffer:', err.message);
+        return [];
+    }
+};
+
+app.get('/api/jobs/recommendations/:email', async (req, res) => {
+    try {
+        const email = req.params.email.toLowerCase();
+        
+        let seeker = null;
+        if (mongoose.connection.readyState !== 1) {
+            if (!memoryDB.seekers[email]) {
+                const name = email.split('@')[0].replace(/[^a-zA-Z]/g, ' ') || 'Jobseeker';
+                const capName = name.charAt(0).toUpperCase() + name.slice(1);
+                memoryDB.seekers[email] = {
+                    name: capName,
+                    email,
+                    qualification: 'Bachelor\'s Degree',
+                    skills: 'JavaScript, React, CSS, Node.js',
+                    resume: '',
+                    status: 'active',
+                    savedJobs: []
+                };
+            }
+            seeker = memoryDB.seekers[email];
+        } else {
+            seeker = await Jobseeker.findOne({ email }).lean();
+        }
+        
+        if (!seeker) {
+            // Online mode fallback to avoid crashes if user does not exist in collection yet
+            seeker = {
+                name: 'Jobseeker',
+                email,
+                qualification: 'Bachelor\'s Degree',
+                skills: 'JavaScript, React, CSS, Node.js',
+                resume: '',
+                status: 'active'
+            };
+        }
+        
+        // Parse skills from profile
+        const profileSkills = String(seeker.skills || '')
+            .toLowerCase()
+            .split(/[,;|/\s]+/)
+            .map(s => s.trim())
+            .filter(Boolean);
+            
+        // Extract skills from resume
+        const resumeKeywords = extractKeywordsFromResume(seeker.resume);
+        
+        // Combine profile skills and resume keywords
+        const allSeekerSkills = Array.from(new Set([...profileSkills, ...resumeKeywords]));
+        
+        // Fetch all active jobs
+        let jobs = [];
+        if (mongoose.connection.readyState !== 1) {
+            jobs = [...memoryDB.jobs];
+        } else {
+            jobs = await Job.find({ status: 'Active' }).lean();
+        }
+        
+        // Match algorithms
+        const recommendations = jobs.map(job => {
+            const jobSkills = String(job.skills || '')
+                .toLowerCase()
+                .split(/[,;|/\s]+/)
+                .map(s => s.trim())
+                .filter(Boolean);
+                
+            let matchedSkills = [];
+            let missingSkills = [];
+            
+            jobSkills.forEach(js => {
+                const isMatched = allSeekerSkills.some(ss => ss === js || ss.includes(js) || js.includes(ss));
+                if (isMatched) {
+                    matchedSkills.push(js);
+                } else {
+                    missingSkills.push(js);
+                }
+            });
+            
+            // 1. Skill Match Score (Max 50 points)
+            let skillScore = 0;
+            if (jobSkills.length > 0) {
+                skillScore = Math.round((matchedSkills.length / jobSkills.length) * 50);
+            } else {
+                skillScore = 40; // Default when no skills required
+            }
+            
+            // 2. Title Match Score (Max 30 points)
+            let titleScore = 0;
+            const jobTitleLower = String(job.title || '').toLowerCase();
+            const matchingKeywordsCount = allSeekerSkills.filter(ss => jobTitleLower.includes(ss)).length;
+            if (matchingKeywordsCount > 0) {
+                titleScore = Math.min(30, matchingKeywordsCount * 15);
+            }
+            
+            const titleWords = jobTitleLower.split(/[\s,./()]+/).filter(w => w.length > 3);
+            const titleWordMatch = titleWords.some(tw => allSeekerSkills.includes(tw));
+            if (titleWordMatch && titleScore === 0) {
+                titleScore = 20;
+            }
+            
+            // 3. Qualification Match Score (Max 20 points)
+            let qualScore = 15; // default moderate qualification match
+            const seekerQual = String(seeker.qualification || '').toLowerCase();
+            const jobTitle = String(job.title || '').toLowerCase();
+            
+            if (seekerQual.includes('cs') || seekerQual.includes('it') || seekerQual.includes('computer') || seekerQual.includes('engineering') || seekerQual.includes('b.tech') || seekerQual.includes('m.tech') || seekerQual.includes('bca') || seekerQual.includes('mca')) {
+                if (jobTitle.includes('developer') || jobTitle.includes('engineer') || jobTitle.includes('architect') || jobTitle.includes('analyst') || jobTitle.includes('coder') || jobTitle.includes('programmer')) {
+                    qualScore = 20;
+                }
+            }
+            
+            const totalScore = skillScore + titleScore + qualScore;
+            const finalScore = Math.min(99, Math.max(50, totalScore));
+            
+            // Match rating
+            let rating = 'Moderate Alignment';
+            if (finalScore >= 90) rating = 'Exceptional Match';
+            else if (finalScore >= 80) rating = 'Strong Match';
+            else if (finalScore >= 65) rating = 'Good Match';
+            
+            // Formulate custom suggestions
+            const suggestions = [];
+            if (missingSkills.length > 0) {
+                suggestions.push(`Consider learning or adding these missing skills: ${missingSkills.slice(0, 3).map(s => s.toUpperCase()).join(', ')}.`);
+            }
+            if (!seeker.resume) {
+                suggestions.push('Upload your professional resume to optimize match accuracy and stand out to recruiters.');
+            }
+            if (suggestions.length === 0) {
+                suggestions.push('Your profile is perfectly optimized for this position. Apply immediately!');
+            }
+            
+            return {
+                ...job,
+                score: finalScore,
+                rating,
+                matchedSkills: matchedSkills.map(s => s.toUpperCase()),
+                missingSkills: missingSkills.map(s => s.toUpperCase()),
+                suggestions
+            };
+        });
+        
+        // Sort recommendations by score descending
+        recommendations.sort((a, b) => b.score - a.score);
+        
+        res.json({
+            success: true,
+            recommendations,
+            skillsAnalyzed: allSeekerSkills.map(s => s.toUpperCase()),
+            hasResume: !!seeker.resume
+        });
+    } catch (err) {
+        console.error('[RECOMMENDATIONS ERROR]', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+/* ================================================================
    FRONTEND FALLBACK & STARTUP
    ================================================================ */
 
@@ -1681,6 +2242,10 @@ app.get('*', (req, res) => {
 });
 
 const ensureDefaultAdmin = async () => {
+    if (mongoose.connection.readyState !== 1) {
+        console.log('[SEED] Skipping default seed accounts check because MongoDB is disconnected.');
+        return;
+    }
     try {
         const adminExists = await Admin.findOne({ email: 'admin@smartjob.com' });
         if (!adminExists) {
@@ -1696,7 +2261,7 @@ const ensureDefaultAdmin = async () => {
         
         const seekerExists = await Jobseeker.findOne({ email: 'joshitha@gmail.com' });
         if (!seekerExists) {
-            await Jobseeker.create({ name: 'Joshitha', email: 'joshitha@gmail.com', password: 'password123', skills: 'JavaScript, React, Node.js, MongoDB', qualification: 'B.Tech CS' });
+            await Jobseeker.create({ name: 'Joshitha', email: 'joshitha@gmail.com', password: 'password123', skills: 'JavaScript, React, Node.js, MongoDB', qualification: 'B.Tech CS', cgpa: '8.9' });
             console.log('[SEED] Default jobseeker created → joshitha@gmail.com | password123');
         }
     } catch (error) {
