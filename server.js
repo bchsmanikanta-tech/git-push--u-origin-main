@@ -607,11 +607,35 @@ app.post('/api/jobs', async (req, res) => {
     const { title, companyEmail, companyName, location, salary, type, skills, description, experience } = req.body;
     if (!title || !companyEmail || !companyName || !location || !salary || !type || !description)
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
+
+    const cleanEmail = companyEmail.toLowerCase().trim();
+    const jobId = 'job_' + Date.now();
+
+    if (mongoose.connection.readyState !== 1) {
+        console.warn('[JOBS] MongoDB is offline. Saving job listing to memory.');
+        const newJob = {
+            id: jobId,
+            _id: jobId,
+            title,
+            companyEmail: cleanEmail,
+            companyName,
+            location,
+            salary,
+            type,
+            skills: skills || '',
+            description,
+            experience: experience || 'Fresher',
+            status: 'Active',
+            createdAt: new Date().toISOString()
+        };
+        memoryDB.jobs.push(newJob);
+        return res.status(201).json({ success: true, message: 'Job posted successfully (Memory Fallback)!', job: newJob });
+    }
+
     try {
-        const jobId  = 'job_' + Date.now();
         const newJob = await Job.create({
             _id: jobId, title,
-            companyEmail: companyEmail.toLowerCase(), companyName,
+            companyEmail: cleanEmail, companyName,
             location, salary, type,
             skills: skills || '',
             description,
@@ -639,7 +663,7 @@ app.post('/api/jobs', async (req, res) => {
         res.status(201).json({ success: true, message: 'Job posted successfully!', job: newJob });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: 'Server error.' });
+        res.status(500).json({ success: false, message: 'Server error: ' + error.message });
     }
 });
 

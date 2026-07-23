@@ -155,6 +155,7 @@
 
                 } catch (err) {
                     console.error("Job posting failed:", err);
+                    showToast(err.message || "Unable to post job vacancy. Please try again.", "error");
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<i class="bi bi-plus-circle-fill"></i> Post Vacancy';
                 }
