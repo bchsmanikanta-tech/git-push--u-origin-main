@@ -411,7 +411,10 @@ function renderLogTable(logs) {
         return;
     }
 
-    tbody.innerHTML = logs.map(log => {
+    // Store in global window namespace to avoid escaping issues in inline HTML events
+    window._activeLogsRendered = logs;
+
+    tbody.innerHTML = logs.map((log, index) => {
         const sev = (log.severity || 'info').toLowerCase();
         let badgeClass = 'badge-info-subtle';
         let icon = 'bi-info-circle-fill';
@@ -431,7 +434,7 @@ function renderLogTable(logs) {
             <td class="font-monospace small text-muted">${log.ipAddress || '127.0.0.1'}</td>
             <td><span class="badge ${badgeClass} rounded-pill px-3 py-1"><i class="bi ${icon} me-1"></i>${sev.toUpperCase()}</span></td>
             <td class="pe-4 text-end">
-                <button class="btn btn-sm btn-light border" onclick='viewLogDetail(${JSON.stringify(log).replace(/'/g, "&apos;")})'>
+                <button class="btn btn-sm btn-light border" onclick="viewLogDetailByIndex(${index})">
                     <i class="bi bi-eye"></i> View
                 </button>
             </td>
@@ -443,6 +446,12 @@ function resetFilters() {
     document.getElementById('searchInput').value = '';
     document.getElementById('severityFilter').value = 'all';
     filterLogs();
+}
+
+function viewLogDetailByIndex(index) {
+    const log = window._activeLogsRendered && window._activeLogsRendered[index];
+    if (!log) return;
+    viewLogDetail(log);
 }
 
 function viewLogDetail(log) {

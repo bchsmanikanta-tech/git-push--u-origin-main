@@ -12,6 +12,7 @@ const rateLimit  = require('express-rate-limit');
 const connectDB  = require('./db/connection');
 const { Jobseeker, Company, Job, Application, Admin, Notification, Message, Interview, CompanyReview, AuditLog, SystemSettings } = require('./db/models');
 const mongoose = require('mongoose');
+mongoose.set('bufferCommands', false);
 
 // In-memory fallback database when MongoDB connection is offline
 const memoryDB = {
@@ -281,6 +282,14 @@ app.post('/api/auth/login-company', async (req, res) => {
     const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
 
     try {
+        if (mongoose.connection.readyState !== 1) {
+            const company = memoryDB.companies[cleanEmail];
+            if (company) {
+                return res.status(200).json({ success: true, message: 'Login successful!', user: { name: company.name || capName, email: cleanEmail, role: 'company' } });
+            }
+            memoryDB.companies[cleanEmail] = { name: capName, email: cleanEmail, password: password || 'password123', status: 'active' };
+            return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'company' } });
+        }
         let company = await Company.findOne({ email: cleanEmail });
         if (!company) {
             company = await Company.create({ name: capName, email: cleanEmail, password: password || 'password123', status: 'active' });
@@ -952,6 +961,11 @@ app.post('/api/admin/auth/login', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Please enter email and password.' });
     const cleanEmail = email.toLowerCase().trim();
     try {
+        if (mongoose.connection.readyState !== 1) {
+            const fallbackAdmin = { name: 'Super Admin', email: cleanEmail, role: 'Super Admin' };
+            const token = generateAdminToken(fallbackAdmin);
+            return res.json({ success: true, message: 'Admin login successful (Offline Mode)!', admin: fallbackAdmin, token });
+        }
         let admin = await Admin.findOne({ email: cleanEmail });
         if (!admin) {
             admin = await Admin.create({ name: 'Super Admin', email: cleanEmail, password, role: 'Super Admin', status: 'Active' });
