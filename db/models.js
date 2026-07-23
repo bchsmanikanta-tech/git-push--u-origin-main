@@ -116,7 +116,8 @@ const companyReviewSchema = new mongoose.Schema({
     pros:         { type: String, default: '' },
     cons:         { type: String, default: '' },
     workLifeRating: { type: Number, default: 4 },
-    cultureRating:  { type: Number, default: 4 }
+    cultureRating:  { type: Number, default: 4 },
+    status:        { type: String, default: 'Pending' }
 }, { timestamps: true });
 
 // ─── Audit Log Schema ────────────────────────────────────────────────────────

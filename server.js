@@ -2287,6 +2287,111 @@ app.get('/api/jobs/recommendations/:email', async (req, res) => {
 });
 
 /* ================================================================
+   NEW ADMIN UTILITY API ENDPOINTS (REVIEWS & CHATS MONITOR)
+   ================================================================ */
+
+// Fetch all company reviews for moderation
+app.get('/api/admin/company-reviews', adminAuth, async (req, res) => {
+    try {
+        let reviews = [];
+        if (mongoose.connection.readyState === 1) {
+            reviews = await CompanyReview.find().sort({ createdAt: -1 });
+        } else {
+            // Memory DB fallback
+            reviews = [
+                { _id: 'rev_1', companyEmail: 'hr@techcorp.com', seekerEmail: 'joshitha@gmail.com', seekerName: 'Joshitha', rating: 5, reviewTitle: 'Great Work Culture', pros: 'Flexible hours, friendly teammates', cons: 'High workload during product launch', status: 'Pending' }
+            ];
+        }
+        res.json({ success: true, reviews });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Update company review status (Approve, Reject, Flag)
+app.patch('/api/admin/company-reviews/:id/status', adminAuth, async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    try {
+        if (mongoose.connection.readyState === 1) {
+            const review = await CompanyReview.findById(id);
+            if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+            review.status = status;
+            await review.save();
+        } else {
+            // Memory mock status update
+            console.log(`[MOCK REVIEW STATUS UPDATE] Review ${id} status set to ${status}`);
+        }
+        res.json({ success: true, message: `Review status updated to ${status}.` });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Fetch all unique chat pairs
+app.get('/api/admin/chats', adminAuth, async (req, res) => {
+    try {
+        let chats = [];
+        if (mongoose.connection.readyState === 1) {
+            // Aggregate unique sender-receiver pairs
+            const pairs = await Message.aggregate([
+                {
+                    $group: {
+                        _id: {
+                            user1: { $cond: [{ $lt: ["$senderEmail", "$receiverEmail"] }, "$senderEmail", "$receiverEmail"] },
+                            user2: { $cond: [{ $lt: ["$senderEmail", "$receiverEmail"] }, "$receiverEmail", "$senderEmail"] }
+                        },
+                        lastMessage: { $last: "$message" },
+                        lastTimestamp: { $last: "$createdAt" }
+                    }
+                },
+                { $sort: { lastTimestamp: -1 } }
+            ]);
+            chats = pairs.map(p => ({
+                user1: p._id.user1,
+                user2: p._id.user2,
+                lastMessage: p.lastMessage,
+                lastTimestamp: p.lastTimestamp
+            }));
+        } else {
+            // Memory DB fallback
+            chats = [
+                { user1: 'joshitha@gmail.com', user2: 'hr@techcorp.com', lastMessage: 'Thank you for scheduling the interview. I will be there.', lastTimestamp: new Date().toISOString() }
+            ];
+        }
+        res.json({ success: true, chats });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Fetch full message logs between two users
+app.get('/api/admin/chats/messages', adminAuth, async (req, res) => {
+    const { user1, user2 } = req.query;
+    if (!user1 || !user2) return res.status(400).json({ success: false, message: 'Missing user emails' });
+    try {
+        let messages = [];
+        if (mongoose.connection.readyState === 1) {
+            messages = await Message.find({
+                $or: [
+                    { senderEmail: user1, receiverEmail: user2 },
+                    { senderEmail: user2, receiverEmail: user1 }
+                ]
+            }).sort({ createdAt: 1 });
+        } else {
+            // Memory fallback
+            messages = [
+                { senderEmail: 'hr@techcorp.com', receiverEmail: 'joshitha@gmail.com', message: 'Hello Joshitha, we reviewed your profile and would love to chat.', createdAt: new Date(Date.now() - 3600000).toISOString() },
+                { senderEmail: 'joshitha@gmail.com', receiverEmail: 'hr@techcorp.com', message: 'Thank you for scheduling the interview. I will be there.', createdAt: new Date().toISOString() }
+            ];
+        }
+        res.json({ success: true, messages });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+/* ================================================================
    FRONTEND FALLBACK & STARTUP
    ================================================================ */
 
