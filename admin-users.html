@@ -294,6 +294,42 @@ window.onerror = function(message, source, lineno, colno, error) {
     document.body.appendChild(banner);
 };
 
+// On-screen debugger console to catch hidden errors
+document.addEventListener('DOMContentLoaded', () => {
+    const debugDiv = document.createElement('div');
+    debugDiv.id = 'live-debugger';
+    debugDiv.style.cssText = 'position:fixed;bottom:20px;left:20px;width:380px;max-height:220px;overflow-y:auto;background:rgba(15,23,42,0.95);color:#38bdf8;padding:15px;font-family:monospace;font-size:11px;border-radius:12px;z-index:99999;box-shadow:0 10px 25px rgba(0,0,0,0.35);border:1px solid rgba(56,189,248,0.2);line-height:1.5;';
+    debugDiv.innerHTML = '<div style="border-bottom:1px solid rgba(56,189,248,0.2);padding-bottom:5px;margin-bottom:8px;font-weight:bold;color:#f1f5f9;">⚙️ Live Debug Logs</div>';
+    document.body.appendChild(debugDiv);
+
+    const logToScreen = (msg, color = '#38bdf8') => {
+        const p = document.createElement('div');
+        p.style.color = color;
+        p.style.marginBottom = '4px';
+        p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        debugDiv.appendChild(p);
+        debugDiv.scrollTop = debugDiv.scrollHeight;
+    };
+
+    const oldError = console.error;
+    console.error = function(...args) {
+        logToScreen(args.join(' '), '#ef4444');
+        oldError.apply(console, args);
+    };
+
+    const oldLog = console.log;
+    console.log = function(...args) {
+        logToScreen(args.join(' '), '#38bdf8');
+        oldLog.apply(console, args);
+    };
+
+    window.addEventListener('unhandledrejection', function(event) {
+        logToScreen(`Promise Rejected: ${event.reason}`, '#f59e0b');
+    });
+
+    logToScreen('Debugger initialized. Loading users...');
+});
+
 const adminUser = JSON.parse(localStorage.getItem('adminUser')||'null');
 const adminToken = localStorage.getItem('adminToken');
 if (!adminUser || !adminToken) window.location.href = 'admin-login.html';
