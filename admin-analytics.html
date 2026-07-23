@@ -489,9 +489,24 @@ async function loadDashboard() {
         // Activity feed
         buildActivity(s.recentActivity || []);
 
-        // Charts
-        buildJobsChart(s.jobsByDay || []);
-        buildPieChart(s.pendingApplications, s.selectedApplications, s.rejectedApplications);
+        // Charts (Safely rendered in case CDN is blocked/offline)
+        if (typeof Chart !== 'undefined') {
+            buildJobsChart(s.jobsByDay || []);
+            buildPieChart(s.pendingApplications, s.selectedApplications, s.rejectedApplications);
+        } else {
+            console.warn('[ADMIN ANALYTICS] Chart.js library is not loaded.');
+            const legend = document.getElementById('pieLegend');
+            if (legend) {
+                legend.innerHTML = `<div class="alert alert-warning py-2 small mb-0"><i class="bi bi-exclamation-triangle-fill me-1"></i>Chart library offline (CDN blocked). Status counts are still fully visible below:</div><div class="mt-3">` + [
+                    { label: 'Pending', count: s.pendingApplications, color: '#f59e0b' },
+                    { label: 'Selected', count: s.selectedApplications, color: '#10b981' },
+                    { label: 'Rejected', count: s.rejectedApplications, color: '#ef4444' }
+                ].map(item => `<div class="d-flex align-items-center gap-2 mb-2">
+                    <div style="width:10px;height:10px;border-radius:50%;background:${item.color};"></div>
+                    <span style="font-size:12px;">${item.label}: <strong>${item.count}</strong></span>
+                </div>`).join('') + `</div>`;
+            }
+        }
 
     } catch (err) {
         console.error('Dashboard load error:', err);
