@@ -847,7 +847,8 @@ async function initStatsPage() {
         // Render charts securely
         renderStatsCharts(s);
     } catch (err) {
-        showToast('Could not sync real-time dashboard data.', 'error');
+        console.error('Stats sync error:', err);
+        showToast('Could not sync real-time dashboard data: ' + err.message, 'error');
         // Render fallback stats
         renderFallbackStats();
     }
@@ -921,7 +922,11 @@ function renderStatsCharts(s) {
         const labels = byDay.map(x => x.date);
         const values = byDay.map(x => x.count);
 
-        new Chart(jobsTrendCanvas.getContext('2d'), {
+        if (window.jobsChartInstance) {
+            window.jobsChartInstance.destroy();
+        }
+
+        window.jobsChartInstance = new Chart(jobsTrendCanvas.getContext('2d'), {
             type: 'line',
             data: {
                 labels,
@@ -953,7 +958,11 @@ function renderStatsCharts(s) {
         const rejected = s.rejectedApplications || 0;
         const total = pending + selected + rejected;
 
-        new Chart(pieCanvas.getContext('2d'), {
+        if (window.pieChartInstance) {
+            window.pieChartInstance.destroy();
+        }
+
+        window.pieChartInstance = new Chart(pieCanvas.getContext('2d'), {
             type: 'doughnut',
             data: {
                 labels: ['Pending', 'Selected', 'Rejected'],
