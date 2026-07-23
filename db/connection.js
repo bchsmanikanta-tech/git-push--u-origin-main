@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
-    const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/smartjobfinder';
+    const mongoURI = process.env.MONGO_URI || 'mongodb+srv://bhaihack333_db_user:kRTnlwlPdikPS4m8@smartjob.alq6c0s.mongodb.net/smartjobfinder?retryWrites=true&w=majority&appName=smartjob';
     try {
         const conn = await mongoose.connect(mongoURI, {
             serverSelectionTimeoutMS: 5000,

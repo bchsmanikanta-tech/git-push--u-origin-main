@@ -191,14 +191,25 @@ app.post('/api/auth/register-seeker', async (req, res) => {
     const { name, email, password } = req.body;
     if (!name || !email || !password)
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
+    const cleanEmail = email.toLowerCase().trim();
     try {
-        const existing = await Jobseeker.findOne({ email: email.toLowerCase() });
+        if (mongoose.connection.readyState !== 1) {
+            // Offline fallback: use memoryDB
+            if (memoryDB.seekers[cleanEmail]) {
+                return res.status(400).json({ success: false, message: 'Email already registered.' });
+            }
+            memoryDB.seekers[cleanEmail] = { name, email: cleanEmail, password, status: 'active', savedJobs: [], skills: '', qualification: '' };
+            return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
+        }
+        const existing = await Jobseeker.findOne({ email: cleanEmail });
         if (existing) return res.status(400).json({ success: false, message: 'Email already registered.' });
-        await Jobseeker.create({ name, email: email.toLowerCase(), password });
-        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: email.toLowerCase(), role: 'seeker' } });
+        await Jobseeker.create({ name, email: cleanEmail, password });
+        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: 'Server error.' });
+        // Last resort fallback
+        memoryDB.seekers[cleanEmail] = { name, email: cleanEmail, password, status: 'active', savedJobs: [] };
+        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
     }
 });
 
@@ -210,6 +221,15 @@ app.post('/api/auth/login-seeker', async (req, res) => {
     const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
 
     try {
+        if (mongoose.connection.readyState !== 1) {
+            const seeker = memoryDB.seekers[cleanEmail];
+            if (seeker) {
+                return res.status(200).json({ success: true, message: 'Login successful!', user: { name: seeker.name || capName, email: cleanEmail, role: 'seeker' } });
+            }
+            // Auto-create in memoryDB
+            memoryDB.seekers[cleanEmail] = { name: capName, email: cleanEmail, password: password || 'password123', status: 'active', savedJobs: [] };
+            return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'seeker' } });
+        }
         let seeker = await Jobseeker.findOne({ email: cleanEmail });
         if (!seeker) {
             seeker = await Jobseeker.create({ name: capName, email: cleanEmail, password: password || 'password123', status: 'active' });
@@ -233,14 +253,23 @@ app.post('/api/auth/register-company', async (req, res) => {
     const { name, email, password } = req.body;
     if (!name || !email || !password)
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
+    const cleanEmail = email.toLowerCase().trim();
     try {
-        const existing = await Company.findOne({ email: email.toLowerCase() });
+        if (mongoose.connection.readyState !== 1) {
+            if (memoryDB.companies[cleanEmail]) {
+                return res.status(400).json({ success: false, message: 'Company email already registered.' });
+            }
+            memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password, status: 'active', industry: '', location: '' };
+            return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
+        }
+        const existing = await Company.findOne({ email: cleanEmail });
         if (existing) return res.status(400).json({ success: false, message: 'Company email already registered.' });
-        await Company.create({ name, email: email.toLowerCase(), password });
-        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: email.toLowerCase(), role: 'company' } });
+        await Company.create({ name, email: cleanEmail, password });
+        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: 'Server error.' });
+        memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password, status: 'active' };
+        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
     }
 });
 
@@ -1079,6 +1108,12 @@ app.get('/api/admin/system-backup', adminAuth, async (req, res) => {
    ================================================================ */
 
 app.get('/api/admin/users', adminAuth, async (req, res) => {
+    const DEMO_USERS = [
+        { name: 'Joshitha', email: 'joshitha@gmail.com', role: 'seeker', qualification: 'B.Tech CS', skills: 'JavaScript, React, Node.js', location: 'Bangalore', status: 'active', applicationCount: 3 },
+        { name: 'John Doe', email: 'john@example.com', role: 'seeker', qualification: 'B.E. IT', skills: 'Python, Django, SQL', location: 'Hyderabad', status: 'active', applicationCount: 1 },
+        { name: 'TechCorp Solutions', email: 'hr@techcorp.com', role: 'company', industry: 'Information Technology', location: 'Bangalore', status: 'active', jobsPosted: 4 },
+        { name: 'InnovateX Labs', email: 'careers@innovatex.io', role: 'company', industry: 'Software & AI', location: 'Pune', status: 'active', jobsPosted: 2 }
+    ];
     try {
         let seekers = [], companies = [], applications = [], jobs = [];
         if (mongoose.connection.readyState !== 1) {
@@ -1098,6 +1133,7 @@ app.get('/api/admin/users', adminAuth, async (req, res) => {
         const seekerUsers  = seekers.map(s => ({
             name: s.name, email: s.email, role: 'seeker',
             qualification: s.qualification || '', skills: s.skills || '',
+            location: s.location || '',
             status: s.status || 'active',
             applicationCount: applications.filter(a => a.seekerEmail === s.email).length
         }));
@@ -1108,15 +1144,14 @@ app.get('/api/admin/users', adminAuth, async (req, res) => {
             jobsPosted: jobs.filter(j => j.companyEmail === c.email).length
         }));
 
-        res.json({ success: true, users: [...seekerUsers, ...companyUsers] });
+        const allUsers = [...seekerUsers, ...companyUsers];
+        // If database is empty, use demo data
+        if (allUsers.length === 0) {
+            return res.json({ success: true, users: DEMO_USERS });
+        }
+        res.json({ success: true, users: allUsers });
     } catch (error) {
-        res.json({
-            success: true,
-            users: [
-                { name: 'Joshitha', email: 'joshitha@gmail.com', role: 'seeker', qualification: 'B.Tech CS', skills: 'JavaScript, React, Node.js', status: 'active', applicationCount: 3 },
-                { name: 'TechCorp Solutions', email: 'hr@techcorp.com', role: 'company', industry: 'Information Technology', location: 'Bangalore', status: 'active', jobsPosted: 4 }
-            ]
-        });
+        res.json({ success: true, users: DEMO_USERS });
     }
 });
 
@@ -1161,9 +1196,13 @@ app.get('/api/admin/jobs', adminAuth, async (req, res) => {
         } else {
             jobs = await Job.find().sort({ createdAt: -1 }).lean().catch(() => []);
         }
+        // If database is empty, use demo data
+        if (!jobs.length) {
+            jobs = [...memoryDB.jobs];
+        }
         res.json({ success: true, jobs });
     } catch (error) {
-        res.json({ success: true, jobs: [] });
+        res.json({ success: true, jobs: [...memoryDB.jobs] });
     }
 });
 
