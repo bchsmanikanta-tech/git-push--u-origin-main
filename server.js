@@ -1224,7 +1224,16 @@ app.get('/api/admin/jobs', adminAuth, async (req, res) => {
 app.patch('/api/admin/jobs/:id/status', adminAuth, async (req, res) => {
     try {
         const { status } = req.body;
-        const job = await Job.findOneAndUpdate({ _id: req.params.id }, { status }, { new: true });
+        const jobId = req.params.id;
+
+        if (mongoose.connection.readyState !== 1 || !mongoose.Types.ObjectId.isValid(jobId)) {
+            const job = memoryDB.jobs.find(j => j._id === jobId || j.id === jobId);
+            if (!job) return res.status(404).json({ success: false, message: 'Job not found (Mock).' });
+            job.status = status;
+            return res.json({ success: true, job, message: `Job status updated to ${status} (Mock).` });
+        }
+
+        const job = await Job.findOneAndUpdate({ _id: jobId }, { status }, { new: true });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         await logAuditAction(req.admin, 'Job Status Changed', `Job "${job.title}" status changed to "${status}"`, 'Job Management', 'info', req);
         res.json({ success: true, job, message: `Job status updated to ${status}.` });
@@ -1236,7 +1245,16 @@ app.patch('/api/admin/jobs/:id/status', adminAuth, async (req, res) => {
 // Admin Job Toggle Featured
 app.patch('/api/admin/jobs/:id/featured', adminAuth, async (req, res) => {
     try {
-        const job = await Job.findOne({ _id: req.params.id });
+        const jobId = req.params.id;
+
+        if (mongoose.connection.readyState !== 1 || !mongoose.Types.ObjectId.isValid(jobId)) {
+            const job = memoryDB.jobs.find(j => j._id === jobId || j.id === jobId);
+            if (!job) return res.status(404).json({ success: false, message: 'Job not found (Mock).' });
+            job.featured = !job.featured;
+            return res.json({ success: true, featured: job.featured, message: `Job featured toggled to ${job.featured} (Mock).` });
+        }
+
+        const job = await Job.findOne({ _id: jobId });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         job.featured = !job.featured;
         await job.save();
@@ -1250,7 +1268,16 @@ app.patch('/api/admin/jobs/:id/featured', adminAuth, async (req, res) => {
 // Admin Job Update
 app.put('/api/admin/jobs/:id', adminAuth, async (req, res) => {
     try {
-        const job = await Job.findOneAndUpdate({ _id: req.params.id }, req.body, { new: true });
+        const jobId = req.params.id;
+
+        if (mongoose.connection.readyState !== 1 || !mongoose.Types.ObjectId.isValid(jobId)) {
+            const index = memoryDB.jobs.findIndex(j => j._id === jobId || j.id === jobId);
+            if (index === -1) return res.status(404).json({ success: false, message: 'Job not found (Mock).' });
+            memoryDB.jobs[index] = { ...memoryDB.jobs[index], ...req.body };
+            return res.json({ success: true, job: memoryDB.jobs[index], message: 'Job updated (Mock).' });
+        }
+
+        const job = await Job.findOneAndUpdate({ _id: jobId }, req.body, { new: true });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         await logAuditAction(req.admin, 'Job Updated', `Updated job details for "${job.title}"`, 'Job Management', 'info', req);
         res.json({ success: true, job, message: 'Job details updated successfully.' });
@@ -1262,7 +1289,14 @@ app.put('/api/admin/jobs/:id', adminAuth, async (req, res) => {
 // Admin Job Delete
 app.delete('/api/admin/jobs/:id', adminAuth, async (req, res) => {
     try {
-        const job = await Job.findOneAndDelete({ _id: req.params.id });
+        const jobId = req.params.id;
+
+        if (mongoose.connection.readyState !== 1 || !mongoose.Types.ObjectId.isValid(jobId)) {
+            memoryDB.jobs = memoryDB.jobs.filter(j => j._id !== jobId && j.id !== jobId);
+            return res.json({ success: true, message: 'Job deleted successfully (Mock).' });
+        }
+
+        const job = await Job.findOneAndDelete({ _id: jobId });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         await logAuditAction(req.admin, 'Job Deleted', `Deleted job listing "${job.title}"`, 'Job Management', 'warning', req);
         res.json({ success: true, message: 'Job deleted successfully.' });
