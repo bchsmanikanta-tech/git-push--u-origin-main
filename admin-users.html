@@ -286,6 +286,14 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="js/api.js"></script>
 <script>
+// Global Error Diagnostic Banner
+window.onerror = function(message, source, lineno, colno, error) {
+    const banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#ef4444;color:white;padding:16px 24px;border-radius:10px;z-index:99999;font-weight:700;box-shadow:0 10px 30px rgba(239,68,68,0.35);font-family:Outfit,sans-serif;font-size:14px;';
+    banner.innerHTML = `⚠️ Script Error: ${message} (at line ${lineno})`;
+    document.body.appendChild(banner);
+};
+
 const adminUser = JSON.parse(localStorage.getItem('adminUser')||'null');
 const adminToken = localStorage.getItem('adminToken');
 if (!adminUser || !adminToken) window.location.href = 'admin-login.html';
@@ -321,7 +329,7 @@ function getFallbackUsers() {
 async function loadUsers() {
     try {
         const data = await API.admin.getUsers();
-        if (data && data.users && data.users.length) {
+        if (data && data.users && Array.isArray(data.users)) {
             allUsers = data.users;
         } else {
             allUsers = getFallbackUsers();
@@ -335,13 +343,19 @@ async function loadUsers() {
 }
 
 function updateStats() {
-    const seekers = allUsers.filter(u => u.role === 'seeker');
-    const companies = allUsers.filter(u => u.role === 'company');
-    const banned = allUsers.filter(u => u.status === 'banned' || u.status === 'suspended');
-    document.getElementById('totalUsers').textContent = allUsers.length;
-    document.getElementById('totalSeekers').textContent = seekers.length;
-    document.getElementById('totalCompanies').textContent = companies.length;
-    document.getElementById('bannedCount').textContent = banned.length;
+    const seekers = allUsers.filter(u => u && u.role === 'seeker');
+    const companies = allUsers.filter(u => u && u.role === 'company');
+    const banned = allUsers.filter(u => u && (u.status === 'banned' || u.status === 'suspended'));
+    
+    const elTotal = document.getElementById('totalUsers');
+    const elSeekers = document.getElementById('totalSeekers');
+    const elCompanies = document.getElementById('totalCompanies');
+    const elBanned = document.getElementById('bannedCount');
+    
+    if (elTotal) elTotal.textContent = allUsers.length;
+    if (elSeekers) elSeekers.textContent = seekers.length;
+    if (elCompanies) elCompanies.textContent = companies.length;
+    if (elBanned) elBanned.textContent = banned.length;
 }
 
 function switchTab(tab, btn) {
@@ -355,15 +369,18 @@ function switchTab(tab, btn) {
 function applyFilters() {
     const searchInput = document.getElementById('userSearch');
     const statusSelect = document.getElementById('statusFilterUser');
-    const search = searchInput ? searchInput.value.toLowerCase() : '';
+    const search = searchInput ? searchInput.value.toLowerCase().trim() : '';
     const statusFilter = statusSelect ? statusSelect.value : '';
     
     filteredUsers = allUsers.filter(u => {
+        if (!u) return false;
         const matchTab = currentTab === 'all' || 
                          (currentTab === 'seeker' && u.role === 'seeker') ||
                          (currentTab === 'company' && u.role === 'company') ||
                          (currentTab === 'banned' && (u.status === 'banned' || u.status === 'suspended'));
-        const matchSearch = !search || u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search);
+        const matchSearch = !search || 
+                            (u.name || '').toLowerCase().includes(search) || 
+                            (u.email || '').toLowerCase().includes(search);
         const matchStatus = !statusFilter || u.status === statusFilter;
         return matchTab && matchSearch && matchStatus;
     });
