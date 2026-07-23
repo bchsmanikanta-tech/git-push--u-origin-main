@@ -494,7 +494,10 @@ async function loadDashboard() {
 
         // Alert badge
         const alertCount = (s.totalJobs === 0 ? 1 : 0);
-        document.getElementById('alertBadge').textContent = alertCount;
+        const alertBadge = document.getElementById('alertBadge');
+        if (alertBadge) {
+            alertBadge.textContent = alertCount;
+        }
 
         // Alerts section
         buildAlerts(s);
@@ -526,7 +529,10 @@ function buildAlerts(s) {
     }
     // Update badge
     const alerts = document.querySelectorAll('.alert-banner').length;
-    document.getElementById('alertBadge').textContent = alerts || '0';
+    const alertBadge = document.getElementById('alertBadge');
+    if (alertBadge) {
+        alertBadge.textContent = alerts || '0';
+    }
 }
 
 function buildActivity(activities) {
