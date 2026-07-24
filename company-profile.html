@@ -209,7 +209,7 @@
                     document.getElementById('company-industry-title').innerText = industry;
 
                 } catch (err) {
-                    // Handled inside api.js
+                    showToast(err.message || "Unable to save corporate profile details.", "error");
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<i class="bi bi-save"></i> Save Profile Details';

@@ -225,7 +225,7 @@
                     currentUser.name = name;
                     Session.setUser(currentUser);
                 } catch (err) {
-                    // Handled inside api.js
+                    showToast(err.message || "Unable to save profile. Please check inputs.", "error");
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<i class="bi bi-save"></i> Save Profile Settings';
