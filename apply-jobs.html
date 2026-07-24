@@ -386,7 +386,7 @@
                     showToast(response.message || "Application submitted successfully!", "success");
 
                     setTimeout(() => {
-                        window.location.href = 'my-applications.html';
+                        Session.redirect('my-applications.html');
                     }, 1200);
 
                 } catch (err) {

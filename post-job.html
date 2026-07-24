@@ -114,8 +114,9 @@
             const user = Session.checkAuth('company');
             if (!user) return;
 
-            // Set company name automatically
-            document.getElementById('company-name').value = user.name;
+            // Set company name automatically with fallback
+            const compName = user.name || (user.email ? user.email.split('@')[0] + ' Tech' : 'Company');
+            document.getElementById('company-name').value = compName;
 
             const form = document.getElementById('postJobForm');
             form.addEventListener('submit', async (e) => {
@@ -133,10 +134,13 @@
                 const skills = document.getElementById('skills').value.trim();
                 const description = document.getElementById('description').value.trim();
 
+                const compEmail = user.email || 'hr@company.com';
+                const finalCompName = document.getElementById('company-name').value.trim() || compName;
+
                 const jobData = {
                     title,
-                    companyEmail: user.email,
-                    companyName: user.name,
+                    companyEmail: compEmail,
+                    companyName: finalCompName,
                     location,
                     salary,
                     type,
@@ -150,8 +154,8 @@
                     showToast(response.message || "Vacancy posted successfully!", "success");
 
                     setTimeout(() => {
-                        window.location.href = 'company-dashboard.html';
-                    }, 1200);
+                        Session.redirect('company-dashboard.html');
+                    }, 1000);
 
                 } catch (err) {
                     console.error("Job posting failed:", err);

@@ -182,8 +182,11 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="js/api.js"></script>
 <script>
-const companyUser = Session.getUser() || { email: 'hr@techcorp.com' };
-let candidateList = [];
+document.addEventListener('DOMContentLoaded', () => {
+    const companyUser = Session.checkAuth('company');
+    if (!companyUser) return;
+    
+    let candidateList = [];
 
 async function loadRankings() {
     try {
@@ -281,7 +284,12 @@ async function submitInterview(e) {
     }
 }
 
+window.loadRankings = loadRankings;
+window.openScheduleModal = openScheduleModal;
+window.submitInterview = submitInterview;
+
 loadRankings();
+});
 </script>
 </body>
 </html>

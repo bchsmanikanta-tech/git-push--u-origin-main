@@ -5,27 +5,33 @@ const SafeStorage = {
     isPersistent: true,
     getItem(key) {
         try {
-            return localStorage.getItem(key);
+            const val = localStorage.getItem(key);
+            if (val !== null && val !== undefined) return val;
         } catch (e) {
             this.isPersistent = false;
-            return this._memoryStore[key] || null;
         }
+        try {
+            const sessVal = sessionStorage.getItem(key);
+            if (sessVal !== null && sessVal !== undefined) return sessVal;
+        } catch (e) {}
+        return this._memoryStore[key] || null;
     },
     setItem(key, value) {
+        const valStr = String(value);
         try {
-            localStorage.setItem(key, value);
+            localStorage.setItem(key, valStr);
         } catch (e) {
             this.isPersistent = false;
-            this._memoryStore[key] = String(value);
         }
+        try {
+            sessionStorage.setItem(key, valStr);
+        } catch (e) {}
+        this._memoryStore[key] = valStr;
     },
     removeItem(key) {
-        try {
-            localStorage.removeItem(key);
-        } catch (e) {
-            this.isPersistent = false;
-            delete this._memoryStore[key];
-        }
+        try { localStorage.removeItem(key); } catch (e) {}
+        try { sessionStorage.removeItem(key); } catch (e) {}
+        delete this._memoryStore[key];
     }
 };
 
@@ -46,15 +52,6 @@ try {
         if (urlEmail && urlName && urlRole) {
             const user = { name: urlName, email: urlEmail, role: urlRole };
             SafeStorage.setItem('user', JSON.stringify(user));
-            if (SafeStorage.isPersistent) {
-                try {
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete('session_email');
-                    url.searchParams.delete('session_name');
-                    url.searchParams.delete('session_role');
-                    window.history.replaceState({}, document.title, url.pathname + url.search);
-                } catch (e) {}
-            }
         }
     } catch (e) {}
 })();
@@ -115,7 +112,18 @@ function showToast(message, type = 'success') {
 const Session = {
     getUser() {
         try {
-            const data = SafeStorage.getItem('user');
+            let data = SafeStorage.getItem('user');
+            if (!data) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlEmail = urlParams.get('session_email');
+                const urlName = urlParams.get('session_name');
+                const urlRole = urlParams.get('session_role');
+                if (urlEmail && urlName && urlRole) {
+                    const user = { name: urlName, email: urlEmail, role: urlRole };
+                    this.setUser(user);
+                    return user;
+                }
+            }
             return data ? JSON.parse(data) : null;
         } catch {
             return null;
@@ -139,19 +147,31 @@ const Session = {
         }, 1000);
     },
     checkAuth(requiredRole) {
-        const user = this.getUser();
+        let user = this.getUser();
         if (!user) {
-            this.redirect('index.html');
+            showToast("Please log in to access this page.", "warning");
+            setTimeout(() => {
+                if (requiredRole === 'company') {
+                    window.location.href = 'company-login.html';
+                } else if (requiredRole === 'seeker') {
+                    window.location.href = 'jobseeker-login.html';
+                } else {
+                    window.location.href = 'index.html';
+                }
+            }, 800);
             return null;
         }
         if (requiredRole && user.role !== requiredRole) {
-            if (user.role === 'seeker') {
-                this.redirect('jobseeker-dashboard.html');
-            } else if (user.role === 'company') {
-                this.redirect('company-dashboard.html');
-            } else {
-                this.redirect('index.html');
-            }
+            showToast(`Access restricted. Redirecting to your dashboard...`, "info");
+            setTimeout(() => {
+                if (user.role === 'seeker') {
+                    this.redirect('jobseeker-dashboard.html');
+                } else if (user.role === 'company') {
+                    this.redirect('company-dashboard.html');
+                } else {
+                    this.redirect('index.html');
+                }
+            }, 800);
             return null;
         }
         return user;
@@ -654,8 +674,38 @@ window.viewResume = function(resumeData) {
     }
 };
 
+function decorateInternalLinks() {
+    try {
+        const user = Session.getUser();
+        if (!user || !user.email) return;
+
+        document.querySelectorAll('a[href]').forEach(a => {
+            const href = a.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('http:') || href.startsWith('https:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+                return;
+            }
+            if (a.classList.contains('btn-logout')) return;
+            
+            try {
+                const targetPath = href.split('?')[0].split('#')[0];
+                const searchStr = href.includes('?') ? href.substring(href.indexOf('?')) : '';
+                const hashStr = href.includes('#') ? href.substring(href.indexOf('#')) : '';
+                const params = new URLSearchParams(searchStr);
+
+                if (!params.has('session_email')) {
+                    params.set('session_email', user.email);
+                    params.set('session_name', user.name || '');
+                    params.set('session_role', user.role || '');
+                    a.setAttribute('href', targetPath + '?' + params.toString() + hashStr);
+                }
+            } catch(e) {}
+        });
+    } catch(e) {}
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     ensureToastContainer();
+    decorateInternalLinks();
     const logoutBtn = document.querySelector('.btn-logout, a[href="index.html"].btn-light, .btn-light[href="index.html"]');
     if (logoutBtn) {
         logoutBtn.removeAttribute('href');
