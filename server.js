@@ -522,9 +522,10 @@ app.get('/api/jobs', async (req, res) => {
     const { title, location, type, experience, minSalary, page, limit, companyEmail } = req.query;
     if (mongoose.connection.readyState !== 1) {
         console.warn('[JOBS] MongoDB is offline. Using fallback mock jobs.');
-        let jobs = [...memoryDB.jobs];
+        let jobs = memoryDB.jobs.map(j => ({ ...j, id: j.id || j._id, _id: j._id || j.id }));
         if (companyEmail) {
-            jobs = jobs.filter(j => j.companyEmail === companyEmail.toLowerCase());
+            const cleanComp = companyEmail.toLowerCase().trim();
+            jobs = jobs.filter(j => (j.companyEmail || '').toLowerCase().trim() === cleanComp);
         }
         if (title) {
             const t = title.toLowerCase().trim();
@@ -561,7 +562,7 @@ app.get('/api/jobs', async (req, res) => {
     try {
         const filter = {};
         if (companyEmail) {
-            filter.companyEmail = companyEmail.toLowerCase();
+            filter.companyEmail = companyEmail.toLowerCase().trim();
         } else {
             filter.status = 'Active';
         }
@@ -577,7 +578,8 @@ app.get('/api/jobs', async (req, res) => {
         if (type && type !== 'All')             filter.type       = new RegExp(`^${type.trim()}$`, 'i');
         if (experience && experience !== 'All') filter.experience = new RegExp(experience.trim(), 'i');
 
-        let jobs = await Job.find(filter).sort({ createdAt: -1 }).lean();
+        let rawJobs = await Job.find(filter).sort({ createdAt: -1 }).lean();
+        let jobs = rawJobs.map(j => ({ ...j, id: j.id || j._id, _id: j._id || j.id }));
 
         if (minSalary) {
             const minSalVal = parseInt(minSalary, 10) || 0;
@@ -617,8 +619,9 @@ app.get('/api/jobs/:id', async (req, res) => {
         return res.json({ success: true, job });
     }
     try {
-        const job = await Job.findById(req.params.id).lean();
+        let job = await Job.findOne({ $or: [{ _id: id }, { id }] }).lean();
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
+        job = { ...job, id: job.id || job._id, _id: job._id || job.id };
         res.json({ success: true, job });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
@@ -661,7 +664,7 @@ app.post('/api/jobs', async (req, res) => {
     }
 
     try {
-        const newJob = await Job.create(newJobObj);
+        await Job.create(newJobObj);
 
         // Skill-match notifications trigger
         try {
@@ -679,7 +682,7 @@ app.post('/api/jobs', async (req, res) => {
             }
         } catch (nErr) { console.error('Notification error:', nErr.message); }
 
-        res.status(201).json({ success: true, message: 'Job posted successfully!', job: newJob });
+        res.status(201).json({ success: true, message: 'Job posted successfully!', job: newJobObj });
     } catch (error) {
         console.error('[POST JOB MONGO FALLBACK]', error.message);
         res.status(201).json({ success: true, message: 'Job posted successfully!', job: newJobObj });
@@ -688,15 +691,35 @@ app.post('/api/jobs', async (req, res) => {
 
 // Update Job
 app.put('/api/jobs/:id', async (req, res) => {
+    const { id } = req.params;
     const { title, location, salary, type, skills, description, experience, status } = req.body;
+
+    const memIndex = memoryDB.jobs.findIndex(j => j.id === id || j._id === id);
+    if (memIndex !== -1) {
+        if (title) memoryDB.jobs[memIndex].title = title;
+        if (location) memoryDB.jobs[memIndex].location = location;
+        if (salary) memoryDB.jobs[memIndex].salary = salary;
+        if (type) memoryDB.jobs[memIndex].type = type;
+        if (skills !== undefined) memoryDB.jobs[memIndex].skills = skills;
+        if (description) memoryDB.jobs[memIndex].description = description;
+        if (experience) memoryDB.jobs[memIndex].experience = experience;
+        if (status) memoryDB.jobs[memIndex].status = status;
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+        if (memIndex === -1) return res.status(404).json({ success: false, message: 'Job not found.' });
+        return res.json({ success: true, message: 'Job updated successfully!', job: memoryDB.jobs[memIndex] });
+    }
+
     try {
-        const updated = await Job.findByIdAndUpdate(
-            req.params.id,
+        const updated = await Job.findOneAndUpdate(
+            { $or: [{ _id: id }, { id }] },
             { ...(title && { title }), ...(location !== undefined && { location }), ...(salary !== undefined && { salary }), ...(type && { type }), ...(skills !== undefined && { skills }), ...(description !== undefined && { description }), ...(experience && { experience }), ...(status && { status }) },
             { new: true, lean: true }
         );
         if (!updated) return res.status(404).json({ success: false, message: 'Job not found.' });
-        res.json({ success: true, message: 'Job updated successfully!', job: updated });
+        const finalJob = { ...updated, id: updated.id || updated._id, _id: updated._id || updated.id };
+        res.json({ success: true, message: 'Job updated successfully!', job: finalJob });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
     }
@@ -704,9 +727,15 @@ app.put('/api/jobs/:id', async (req, res) => {
 
 // Delete Job
 app.delete('/api/jobs/:id', async (req, res) => {
+    const { id } = req.params;
+    memoryDB.jobs = memoryDB.jobs.filter(j => j.id !== id && j._id !== id);
+
+    if (mongoose.connection.readyState !== 1) {
+        return res.json({ success: true, message: 'Job deleted successfully.' });
+    }
+
     try {
-        const removed = await Job.findByIdAndDelete(req.params.id);
-        if (!removed) return res.status(404).json({ success: false, message: 'Job not found.' });
+        await Job.deleteOne({ $or: [{ _id: id }, { id }] });
         res.json({ success: true, message: 'Job deleted successfully.' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });

@@ -156,9 +156,8 @@
                 noJobsBox.classList.add('d-none');
 
                 try {
-                    const data = await API.jobs.getAll();
-                    // Filter specifically for current logged in company
-                    myJobs = data.jobs.filter(j => j.companyEmail === user.email);
+                    const userEmail = (user.email || '').toLowerCase().trim();
+                    myJobs = (data.jobs || []).filter(j => (j.companyEmail || '').toLowerCase().trim() === userEmail);
                     
                     spinner.classList.add('d-none');
 
