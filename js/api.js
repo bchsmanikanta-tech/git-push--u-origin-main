@@ -496,6 +496,18 @@ const API = {
         }
     },
 
+    messages: {
+        async getConversation(user1, user2) {
+            return apiRequest(`/messages/conversation?user1=${encodeURIComponent(user1)}&user2=${encodeURIComponent(user2)}`);
+        },
+        async send(data) {
+            return apiRequest('/messages/send', {
+                method: 'POST',
+                body: data
+            });
+        }
+    },
+
     reviews: {
         async create(data) {
             return apiRequest('/companies/reviews', {

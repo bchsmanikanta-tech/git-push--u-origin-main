@@ -737,8 +737,88 @@ app.delete('/api/jobs/:id', async (req, res) => {
     try {
         await Job.deleteOne({ $or: [{ _id: id }, { id }] });
         res.json({ success: true, message: 'Job deleted successfully.' });
+});
+
+/* ================================================================
+   MESSAGING / LIVE CHAT
+   ================================================================ */
+
+// Get Conversation between two users
+app.get('/api/messages/conversation', async (req, res) => {
+    const { user1, user2 } = req.query;
+    if (!user1 || !user2) return res.status(400).json({ success: false, message: 'user1 and user2 query parameters required.' });
+
+    const email1 = user1.toLowerCase().trim();
+    const email2 = user2.toLowerCase().trim();
+
+    if (!memoryDB.messages) memoryDB.messages = [];
+    const memFiltered = memoryDB.messages.filter(m => 
+        (m.senderEmail === email1 && m.receiverEmail === email2) ||
+        (m.senderEmail === email2 && m.receiverEmail === email1)
+    );
+
+    if (mongoose.connection.readyState !== 1) {
+        return res.json({ success: true, messages: memFiltered });
+    }
+
+    try {
+        const messages = await Message.find({
+            $or: [
+                { senderEmail: email1, receiverEmail: email2 },
+                { senderEmail: email2, receiverEmail: email1 }
+            ]
+        }).sort({ createdAt: 1 }).lean();
+
+        res.json({ success: true, messages: messages.length ? messages : memFiltered });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Server error.' });
+        console.error('[MESSAGES ERROR]', error.message);
+        res.json({ success: true, messages: memFiltered });
+    }
+});
+
+// Send Chat Message
+app.post('/api/messages/send', async (req, res) => {
+    const { senderEmail, receiverEmail, message } = req.body;
+    if (!senderEmail || !receiverEmail || !message || !message.trim()) {
+        return res.status(400).json({ success: false, message: 'senderEmail, receiverEmail, and message text are required.' });
+    }
+
+    const cleanSender   = senderEmail.toLowerCase().trim();
+    const cleanReceiver = receiverEmail.toLowerCase().trim();
+    const cleanMessage  = message.trim();
+
+    const msgObj = {
+        _id: 'msg_' + Date.now(),
+        senderEmail: cleanSender,
+        receiverEmail: cleanReceiver,
+        message: cleanMessage,
+        isRead: false,
+        createdAt: new Date().toISOString()
+    };
+
+    if (!memoryDB.messages) memoryDB.messages = [];
+    memoryDB.messages.push(msgObj);
+
+    if (mongoose.connection.readyState !== 1) {
+        return res.status(201).json({ success: true, message: 'Message sent successfully!', chatMessage: msgObj });
+    }
+
+    try {
+        const createdMsg = await Message.create(msgObj);
+        
+        // Trigger notification for recipient
+        try {
+            await Notification.create({
+                recipientEmail: cleanReceiver,
+                title: 'New Live Message',
+                message: `New message from ${cleanSender}: "${cleanMessage.slice(0, 45)}${cleanMessage.length > 45 ? '...' : ''}"`
+            });
+        } catch(nErr) {}
+
+        res.status(201).json({ success: true, message: 'Message sent successfully!', chatMessage: createdMsg });
+    } catch (error) {
+        console.error('[SEND MESSAGE ERROR]', error.message);
+        res.status(201).json({ success: true, message: 'Message sent successfully!', chatMessage: msgObj });
     }
 });
 

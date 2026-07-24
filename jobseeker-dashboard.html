@@ -4,29 +4,117 @@
     <meta charset="UTF-8">
     <script>!function(){try{var t=localStorage.getItem("sjvf_theme")||"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}}();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Seeker Dashboard - Smart Job Finder</title>
+    <title>Job Seeker Command Center - Smart Job Finder</title>
     
-    <!-- Bootstrap and Icons -->
+    <!-- Bootstrap 5.3.3 and Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <!-- Custom Style System -->
     <link rel="stylesheet" href="style.css">
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/api.js" defer></script>
+    
+    <style>
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .hero-glass-card {
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.95), rgba(20, 184, 166, 0.9));
+            color: #ffffff;
+            border-radius: 24px;
+            padding: 2.5rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(37, 99, 235, 0.25);
+        }
+        .hero-glass-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .stat-card-gradient {
+            border: 1px solid var(--border-color, #e2e8f0);
+            border-radius: 20px;
+            padding: 1.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: var(--bg-card, #ffffff);
+        }
+        .stat-card-gradient:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        .nav-pills-custom .nav-link {
+            border-radius: 50rem;
+            padding: 0.6rem 1.4rem;
+            font-weight: 600;
+            color: var(--text-secondary, #64748b);
+            transition: all 0.2s ease;
+        }
+        .nav-pills-custom .nav-link.active {
+            background: linear-gradient(135deg, #2563EB, #1D4ED8);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .badge-match-high {
+            background: rgba(16, 185, 129, 0.15);
+            color: #059669;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .badge-match-mid {
+            background: rgba(37, 99, 235, 0.15);
+            color: #2563eb;
+            border: 1px solid rgba(37, 99, 235, 0.3);
+        }
+
+        .action-tool-card {
+            border-radius: 16px;
+            padding: 1.25rem;
+            background: var(--bg-card, #ffffff);
+            border: 1px solid var(--border-color, #e2e8f0);
+            transition: all 0.3s ease;
+        }
+        .action-tool-card:hover {
+            border-color: #2563eb;
+            transform: translateY(-2px);
+        }
+    </style>
 </head>
 <body>
 
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-custom jobseeker-nav">
+    <!-- Top Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-custom jobseeker-nav sticky-top">
         <div class="container">
-            <span class="navbar-brand">
-                <i class="bi bi-person-workspace"></i> Job Seeker Portal
-            </span>
-            <button class="btn btn-outline-danger btn-logout">
-                <i class="bi bi-box-arrow-right"></i> Logout
-            </button>
+            <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+                <div class="bg-primary text-white rounded-circle p-2 d-flex align-items-center justify-content-center" style="width:36px;height:36px;">
+                    <i class="bi bi-person-workspace fs-6"></i>
+                </div>
+                <span class="fw-bold">Job Seeker Portal</span>
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <a href="jobs.html" class="btn btn-sm btn-outline-primary rounded-pill px-3 d-none d-md-inline-block">
+                    <i class="bi bi-search me-1"></i> Search Vacancies
+                </a>
+                <button class="btn btn-sm btn-outline-danger rounded-pill px-3 btn-logout">
+                    <i class="bi bi-box-arrow-right me-1"></i> Logout
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -36,28 +124,28 @@
             <!-- Sidebar -->
             <div class="col-md-3 col-lg-2 sidebar-custom p-0">
                 <div class="py-4">
-                    <h4 class="menu-title">Menu</h4>
+                    <h4 class="menu-title px-3 mb-3 text-uppercase text-secondary small fw-bold tracking-wider">Navigation Menu</h4>
                     <div class="px-3">
                         <a href="#" class="menu-link active" id="menu-dashboard">
-                            <i class="bi bi-house-door"></i> Dashboard
+                            <i class="bi bi-grid-1x2-fill"></i> Dashboard Overview
                         </a>
                         <a href="jobs.html" class="menu-link">
-                            <i class="bi bi-search"></i> Search Jobs
+                            <i class="bi bi-search"></i> Search Vacancies
                         </a>
                         <a href="#" class="menu-link" id="menu-recommended-jobs">
-                            <i class="bi bi-stars" style="color: #7c3aed;"></i> Recommended Jobs
+                            <i class="bi bi-stars text-purple" style="color: #7c3aed;"></i> AI Recommended
                         </a>
                         <a href="#" class="menu-link" id="menu-saved-jobs">
-                            <i class="bi bi-star"></i> Saved Jobs
+                            <i class="bi bi-bookmark-star-fill text-warning"></i> Saved Bookmarks
                         </a>
                         <a href="my-applications.html" class="menu-link">
-                            <i class="bi bi-file-earmark-text"></i> My Applications
+                            <i class="bi bi-file-earmark-text"></i> Application History
                         </a>
-                        <a href="resume-analyzer.html" class="menu-link text-purple fw-semibold" style="color:#7c3aed;">
-                            <i class="bi bi-file-earmark-check"></i> ATS Resume Analyzer
+                        <a href="resume-analyzer.html" class="menu-link text-purple fw-semibold">
+                            <i class="bi bi-file-earmark-check"></i> ATS Resume Match
                         </a>
                         <a href="jobseeker-profile.html" class="menu-link">
-                            <i class="bi bi-person-circle"></i> My Profile
+                            <i class="bi bi-person-circle"></i> Candidate Profile
                         </a>
                         <a href="career-advisor.html" class="menu-link">
                             <i class="bi bi-robot"></i> AI Career Advisor
@@ -75,56 +163,112 @@
                 </div>
             </div>
 
-            <!-- Main Content -->
+            <!-- Main Content Area -->
             <main class="col-md-9 col-lg-10 p-4 p-md-5 animate-fade-in-up">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h2 class="fw-bold">Welcome, <span id="seeker-name">Job Seeker</span> 👋</h2>
-                        <p class="text-secondary mb-0">Find your dream job and track your applications in real-time.</p>
+                
+                <!-- Hero Glass Banner -->
+                <div class="hero-glass-card mb-5">
+                    <div class="row align-items-center">
+                        <div class="col-lg-8">
+                            <span class="badge bg-white bg-opacity-20 text-white rounded-pill px-3 py-1.5 mb-3 fw-semibold">
+                                <i class="bi bi-shield-check me-1"></i> Active Jobseeker Account
+                            </span>
+                            <h1 class="fw-bold display-6 mb-2">Welcome Back, <span id="seeker-name">Candidate</span>! 👋</h1>
+                            <p class="text-white text-opacity-90 fs-5 mb-4">Track job applications in real-time, explore AI-matched vacancies, and practice mock technical interviews.</p>
+                            
+                            <div class="d-flex flex-wrap gap-2">
+                                <a href="jobs.html" class="btn btn-light rounded-pill px-4 py-2 fw-semibold text-primary shadow-sm">
+                                    <i class="bi bi-search me-1"></i> Find Vacancies
+                                </a>
+                                <a href="resume-analyzer.html" class="btn btn-outline-light rounded-pill px-4 py-2 fw-semibold">
+                                    <i class="bi bi-file-earmark-check me-1"></i> Check Resume ATS
+                                </a>
+                                <a href="mock-interview.html" class="btn btn-outline-light rounded-pill px-4 py-2 fw-semibold">
+                                    <i class="bi bi-mic me-1"></i> AI Mock Interview
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-4 text-center mt-4 mt-lg-0">
+                            <div class="bg-white bg-opacity-15 p-4 rounded-4 backdrop-blur">
+                                <h6 class="fw-bold text-white small text-uppercase tracking-wider mb-2">Profile Health</h6>
+                                <div class="progress mb-2" style="height: 10px; background: rgba(255,255,255,0.2);">
+                                    <div class="progress-bar bg-warning rounded-pill" role="progressbar" style="width: 88%;" aria-valuenow="88" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <span class="small text-white text-opacity-90">88% Profile Completeness</span>
+                                <a href="jobseeker-profile.html" class="d-block text-white small fw-bold mt-2 text-decoration-underline">Update Skills & Info</a>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
+                <!-- Main Dashboard View -->
                 <div id="dashboard-main-view">
-                    <!-- Statistics -->
-                    <div class="row g-4 mt-2">
-                        <div class="col-md-4">
-                            <div class="stat-box stat-blue">
-                                <i class="bi bi-search fs-1 mb-2 d-block"></i>
-                                <h5 class="fw-medium">Available Jobs</h5>
-                                <h2 class="fw-bold mb-0" id="stat-available-jobs">0</h2>
+                    
+                    <!-- Stats Grid -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-3">
+                            <div class="stat-card-gradient">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="text-secondary small fw-bold text-uppercase">Available Jobs</span>
+                                    <div class="p-2 rounded-circle bg-primary bg-opacity-10 text-primary">
+                                        <i class="bi bi-briefcase-fill fs-5"></i>
+                                    </div>
+                                </div>
+                                <h2 class="fw-bold mb-0 text-dark" id="stat-available-jobs">0</h2>
                             </div>
                         </div>
                         
-                        <div class="col-md-4">
-                            <div class="stat-box stat-green">
-                                <i class="bi bi-send-fill fs-1 mb-2 d-block"></i>
-                                <h5 class="fw-medium">Applied Jobs</h5>
-                                <h2 class="fw-bold mb-0" id="stat-applied-jobs">0</h2>
+                        <div class="col-md-3">
+                            <div class="stat-card-gradient">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="text-secondary small fw-bold text-uppercase">Applied Jobs</span>
+                                    <div class="p-2 rounded-circle bg-info bg-opacity-10 text-info">
+                                        <i class="bi bi-send-fill fs-5"></i>
+                                    </div>
+                                </div>
+                                <h2 class="fw-bold mb-0 text-dark" id="stat-applied-jobs">0</h2>
                             </div>
                         </div>
                         
-                        <div class="col-md-4">
-                            <div class="stat-box stat-orange">
-                                <i class="bi bi-check-circle-fill fs-1 mb-2 d-block"></i>
-                                <h5 class="fw-medium">Selected Applications</h5>
-                                <h2 class="fw-bold mb-0" id="stat-selected-jobs">0</h2>
+                        <div class="col-md-3">
+                            <div class="stat-card-gradient">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="text-secondary small fw-bold text-uppercase">Shortlisted / Selected</span>
+                                    <div class="p-2 rounded-circle bg-success bg-opacity-10 text-success">
+                                        <i class="bi bi-check-circle-fill fs-5"></i>
+                                    </div>
+                                </div>
+                                <h2 class="fw-bold mb-0 text-dark" id="stat-selected-jobs">0</h2>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="stat-card-gradient">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="text-secondary small fw-bold text-uppercase">Saved Jobs</span>
+                                    <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning">
+                                        <i class="bi bi-star-fill fs-5"></i>
+                                    </div>
+                                </div>
+                                <h2 class="fw-bold mb-0 text-dark" id="stat-saved-count">0</h2>
                             </div>
                         </div>
                     </div>
 
                     <!-- Analytics Charts Row -->
-                    <div class="row g-4 mt-4">
+                    <div class="row g-4 mb-5">
                         <div class="col-md-6">
-                            <div class="premium-card p-4 h-100">
-                                <h5 class="fw-bold mb-3 small text-uppercase text-secondary tracking-wider"><i class="bi bi-pie-chart-fill text-primary me-2"></i>Application Status</h5>
+                            <div class="card shadow-sm border-0 rounded-4 p-4" style="background: var(--bg-card); border: 1px solid var(--border-color) !important;">
+                                <h5 class="fw-bold mb-3 small text-uppercase text-secondary tracking-wider"><i class="bi bi-pie-chart-fill text-primary me-2"></i>Application Status Distribution</h5>
                                 <div class="d-flex justify-content-center align-items-center" style="height: 220px; position: relative;">
                                     <canvas id="statusDoughnutChart" style="max-width: 220px; max-height: 220px;"></canvas>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="premium-card p-4 h-100">
-                                <h5 class="fw-bold mb-3 small text-uppercase text-secondary tracking-wider"><i class="bi bi-graph-up text-primary me-2"></i>Application History</h5>
+                            <div class="card shadow-sm border-0 rounded-4 p-4" style="background: var(--bg-card); border: 1px solid var(--border-color) !important;">
+                                <h5 class="fw-bold mb-3 small text-uppercase text-secondary tracking-wider"><i class="bi bi-graph-up-arrow text-primary me-2"></i>Monthly Application Velocity</h5>
                                 <div style="height: 220px; width: 100%;">
                                     <canvas id="monthlyActivityChart" style="max-height: 220px;"></canvas>
                                 </div>
@@ -132,34 +276,101 @@
                         </div>
                     </div>
 
-                    <!-- Top Matches Showcase -->
-                    <div class="premium-card mt-5 p-4 animate-fade-in-up">
-                        <div class="d-flex justify-content-between align-items-center mb-4">
-                            <h3 class="fw-bold mb-0"><i class="bi bi-stars text-primary me-2"></i>Top Recommendations</h3>
-                            <button id="view-all-recommendations-btn" class="btn btn-sm btn-outline-primary rounded-pill">View All Recommendations</button>
+                    <!-- AI Career Suite Tools Quick Launch -->
+                    <div class="row g-4 mb-5">
+                        <div class="col-12">
+                            <h4 class="fw-bold mb-3" style="color: var(--text-primary);"><i class="bi bi-magic text-primary me-2"></i>AI Career Suite Tools</h4>
                         </div>
-                        <div class="row g-4" id="top-recommendations-row">
-                            <div class="col-12 text-center py-3">
-                                <span class="text-secondary small">Calculating AI matches...</span>
+                        <div class="col-md-4">
+                            <div class="action-tool-card h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center gap-3 mb-3">
+                                        <div class="p-3 bg-purple bg-opacity-10 text-purple rounded-3" style="color: #7c3aed;">
+                                            <i class="bi bi-file-earmark-check fs-3"></i>
+                                        </div>
+                                        <div>
+                                            <h5 class="fw-bold mb-0 text-dark">ATS Resume Analyzer</h5>
+                                            <span class="badge bg-purple-subtle text-purple small" style="color: #7c3aed;">AI Match Engine</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-secondary small">Analyze resume keywords against job requirements to maximize candidate shortlist rates.</p>
+                                </div>
+                                <a href="resume-analyzer.html" class="btn btn-outline-primary rounded-pill w-100 py-2 btn-sm fw-semibold">
+                                    Analyze Resume <i class="bi bi-arrow-right me-1"></i>
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="action-tool-card h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center gap-3 mb-3">
+                                        <div class="p-3 bg-success bg-opacity-10 text-success rounded-3">
+                                            <i class="bi bi-mic fs-3"></i>
+                                        </div>
+                                        <div>
+                                            <h5 class="fw-bold mb-0 text-dark">AI Mock Interview</h5>
+                                            <span class="badge bg-success-subtle text-success small">Interactive Practice</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-secondary small">Practice technical & behavioral questions with real-time AI scoring and improvement feedback.</p>
+                                </div>
+                                <a href="mock-interview.html" class="btn btn-outline-success rounded-pill w-100 py-2 btn-sm fw-semibold">
+                                    Start Session <i class="bi bi-play-circle me-1"></i>
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="action-tool-card h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center gap-3 mb-3">
+                                        <div class="p-3 bg-primary bg-opacity-10 text-primary rounded-3">
+                                            <i class="bi bi-compass fs-3"></i>
+                                        </div>
+                                        <div>
+                                            <h5 class="fw-bold mb-0 text-dark">AI Career Advisor</h5>
+                                            <span class="badge bg-primary-subtle text-primary small">Career Roadmap</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-secondary small">Get customized skill recommendations, milestone roadmaps, and salary projections.</p>
+                                </div>
+                                <a href="career-advisor.html" class="btn btn-outline-primary rounded-pill w-100 py-2 btn-sm fw-semibold">
+                                    Generate Roadmap <i class="bi bi-signpost me-1"></i>
+                                </a>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Recent Applications Section -->
-                    <div class="premium-card mt-5 p-4">
+                    <!-- Top Recommendations Showcase -->
+                    <div class="card shadow-sm border-0 rounded-4 p-4 mb-5" style="background: var(--bg-card); border: 1px solid var(--border-color) !important;">
                         <div class="d-flex justify-content-between align-items-center mb-4">
-                            <h3 class="fw-bold mb-0">Recent Applications</h3>
-                            <a href="my-applications.html" class="btn btn-sm btn-outline-primary rounded-pill">View All</a>
+                            <h4 class="fw-bold mb-0" style="color: var(--text-primary);"><i class="bi bi-stars text-primary me-2"></i>Top Recommendations Showcase</h4>
+                            <button id="view-all-recommendations-btn" class="btn btn-sm btn-outline-primary rounded-pill px-3">View All Recommendations</button>
+                        </div>
+                        <div class="row g-4" id="top-recommendations-row">
+                            <div class="col-12 text-center py-4">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <p class="text-secondary mt-2 small">Scanning profile skills...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Applications Table -->
+                    <div class="card shadow-sm border-0 rounded-4 p-4 mb-5" style="background: var(--bg-card); border: 1px solid var(--border-color) !important;">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h4 class="fw-bold mb-0" style="color: var(--text-primary);"><i class="bi bi-clock-history text-primary me-2"></i>Recent Application History</h4>
+                            <a href="my-applications.html" class="btn btn-sm btn-outline-primary rounded-pill px-3">View Full History</a>
                         </div>
                         
-                        <div class="table-custom-container">
-                            <table class="table table-custom text-center">
+                        <div class="table-responsive">
+                            <table class="table align-middle text-center mb-0">
                                 <thead>
-                                    <tr>
-                                        <th>Company</th>
-                                        <th>Job Role</th>
-                                        <th>Applied Date</th>
-                                        <th>Status</th>
+                                    <tr class="table-light">
+                                        <th class="py-3">Company</th>
+                                        <th class="py-3">Job Role</th>
+                                        <th class="py-3">Applied Date</th>
+                                        <th class="py-3">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody id="recent-applications-table">
@@ -170,11 +381,21 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- Notifications Drawer -->
+                    <div class="card shadow-sm border-0 rounded-4 p-4" style="background: var(--bg-card); border: 1px solid var(--border-color) !important;">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h4 class="fw-bold mb-0" style="color: var(--text-primary);"><i class="bi bi-bell-fill text-warning me-2"></i>Recent Notifications & Interview Invites</h4>
+                        </div>
+                        <div id="notifications-list">
+                            <p class="text-secondary text-center py-3">Loading notifications...</p>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Saved Jobs Tab View -->
                 <div id="saved-jobs-view" class="d-none">
-                    <h3 class="fw-bold mb-4"><i class="bi bi-star-fill text-warning me-2"></i>My Bookmarked Jobs</h3>
+                    <h3 class="fw-bold mb-4" style="color: var(--text-primary);"><i class="bi bi-bookmark-star-fill text-warning me-2"></i>My Saved Bookmarks</h3>
                     <div class="row g-4" id="saved-jobs-container">
                         <div class="col-12 text-center py-5">
                             <div class="spinner-border text-primary" role="status"></div>
@@ -186,7 +407,7 @@
                 <!-- AI Recommended Jobs Tab View -->
                 <div id="recommended-jobs-view" class="d-none">
                     <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h3 class="fw-bold mb-0"><i class="bi bi-stars text-primary me-2"></i>AI Recommended Jobs</h3>
+                        <h3 class="fw-bold mb-0" style="color: var(--text-primary);"><i class="bi bi-stars text-primary me-2"></i>AI Recommended Jobs</h3>
                         <span class="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill fw-semibold">Matched dynamically from Profile & Resume</span>
                     </div>
                     
@@ -200,34 +421,20 @@
                     </div>
                 </div>
 
-                <!-- Notifications Section -->
-                <div class="premium-card mt-5 p-4" id="notifications-section">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h3 class="fw-bold mb-0"><i class="bi bi-bell-fill text-warning me-2"></i>Recent Notifications</h3>
-                    </div>
-                    <div id="notifications-list">
-                        <p class="text-secondary text-center py-3">Loading notifications...</p>
-                    </div>
-                </div>
             </main>
-            
         </div>
     </div>
 
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
-            // Auth check
-            console.log('[DASHBOARD] Checking auth...');
-            console.log('[DASHBOARD] Raw localStorage user:', SafeStorage.getItem('user'));
             const user = Session.checkAuth('seeker');
-            console.log('[DASHBOARD] Auth result:', JSON.stringify(user));
-            if (!user) {
-                console.log('[DASHBOARD] No valid user session found, redirecting to index.html');
-                return;
-            }
+            if (!user) return;
             
             // Set user name
-            document.getElementById('seeker-name').innerText = user.name;
+            document.getElementById('seeker-name').innerText = user.name || user.email.split('@')[0];
 
             let statusChart = null;
             let activityChart = null;
@@ -241,7 +448,6 @@
             const recommendedJobsView = document.getElementById('recommended-jobs-view');
 
             function switchView(viewName) {
-                // Reset active states
                 menuDashboard.classList.remove('active');
                 menuSavedJobs.classList.remove('active');
                 if (menuRecommended) menuRecommended.classList.remove('active');
@@ -267,35 +473,15 @@
             // Check tab query parameter
             const urlParams = new URLSearchParams(window.location.search);
             const initialTab = urlParams.get('tab');
-            if (initialTab === 'saved') {
-                switchView('saved');
-            } else if (initialTab === 'recommended') {
-                switchView('recommended');
-            }
+            if (initialTab === 'saved') switchView('saved');
+            else if (initialTab === 'recommended') switchView('recommended');
 
-            menuDashboard.addEventListener('click', (e) => {
-                e.preventDefault();
-                switchView('dashboard');
-            });
-
-            menuSavedJobs.addEventListener('click', (e) => {
-                e.preventDefault();
-                switchView('saved');
-            });
-
-            if (menuRecommended) {
-                menuRecommended.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    switchView('recommended');
-                });
-            }
+            menuDashboard.addEventListener('click', (e) => { e.preventDefault(); switchView('dashboard'); });
+            menuSavedJobs.addEventListener('click', (e) => { e.preventDefault(); switchView('saved'); });
+            if (menuRecommended) menuRecommended.addEventListener('click', (e) => { e.preventDefault(); switchView('recommended'); });
 
             const viewAllRecsBtn = document.getElementById('view-all-recommendations-btn');
-            if (viewAllRecsBtn) {
-                viewAllRecsBtn.addEventListener('click', () => {
-                    switchView('recommended');
-                });
-            }
+            if (viewAllRecsBtn) viewAllRecsBtn.addEventListener('click', () => switchView('recommended'));
 
             // Load Saved Jobs
             async function loadSavedJobs() {
@@ -311,6 +497,8 @@
                     const res = await API.savedJobs.list(user.email);
                     const jobs = res.jobs || [];
                     container.innerHTML = '';
+
+                    document.getElementById('stat-saved-count').innerText = jobs.length;
 
                     if (jobs.length === 0) {
                         container.innerHTML = `
@@ -333,10 +521,10 @@
 
                         container.innerHTML += `
                             <div class="col-md-6 col-lg-4">
-                                <div class="premium-card p-3 h-100 d-flex flex-column justify-content-between">
+                                <div class="stat-card-gradient h-100 d-flex flex-column justify-content-between">
                                     <div>
                                         <div class="d-flex justify-content-between mb-3">
-                                            <div class="bg-light p-3 rounded-3 text-primary">
+                                            <div class="bg-primary bg-opacity-10 p-3 rounded-3 text-primary">
                                                 <i class="bi ${iconClass} fs-4"></i>
                                             </div>
                                             <button class="btn btn-sm btn-outline-danger border-0 remove-bookmark-btn" data-job-id="${job.id}">
@@ -345,18 +533,17 @@
                                         </div>
                                         <h5 class="fw-bold mb-1" style="color: var(--text-primary);">${job.title}</h5>
                                         <h6 class="text-primary small mb-3">${job.companyName}</h6>
-                                        <p class="small text-secondary mb-2" style="color: var(--text-muted) !important;"><i class="bi bi-geo-alt"></i> ${job.location}</p>
-                                        <p class="small text-secondary mb-3" style="color: var(--text-muted) !important;"><i class="bi bi-currency-rupee"></i> ${job.salary}</p>
+                                        <p class="small text-secondary mb-2"><i class="bi bi-geo-alt"></i> ${job.location}</p>
+                                        <p class="small text-secondary mb-3"><i class="bi bi-currency-rupee"></i> ${job.salary}</p>
                                     </div>
                                     <div class="d-flex gap-2 mt-2">
-                                        <a href="job-details.html?id=${job.id}" class="btn btn-sm btn-premium btn-premium-primary flex-grow-1">View details</a>
+                                        <a href="job-details.html?id=${job.id}" class="btn btn-sm btn-primary rounded-pill w-100">View details</a>
                                     </div>
                                 </div>
                             </div>
                         `;
                     });
 
-                    // Remove Bookmark Click Action
                     container.querySelectorAll('.remove-bookmark-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             e.preventDefault();
@@ -365,9 +552,7 @@
                                 await API.savedJobs.remove(user.email, jobId);
                                 showToast("Bookmark removed!", "info");
                                 loadSavedJobs();
-                            } catch (err) {
-                                console.error(err);
-                            }
+                            } catch (err) { console.error(err); }
                         });
                     });
 
@@ -377,21 +562,26 @@
             }
 
             try {
-                // Load all jobs for counting
+                // Load all jobs for available counter
                 const jobsData = await API.jobs.getAll();
                 document.getElementById('stat-available-jobs').innerText = jobsData.total || jobsData.jobs.length;
 
-                // Load application data
+                // Load applications
                 const appsData = await API.applications.getForSeeker(user.email);
                 const apps = appsData.applications || [];
                 
-                // Count stats
                 document.getElementById('stat-applied-jobs').innerText = apps.length;
                 
                 const selectedCount = apps.filter(a => a.status === 'Selected').length;
                 const rejectedCount = apps.filter(a => a.status === 'Rejected').length;
                 const pendingCount = apps.filter(a => a.status === 'Pending').length;
                 document.getElementById('stat-selected-jobs').innerText = selectedCount;
+
+                // Load bookmarks count
+                try {
+                    const savedRes = await API.savedJobs.list(user.email);
+                    document.getElementById('stat-saved-count').innerText = (savedRes.jobs || []).length;
+                } catch(e) {}
 
                 // Render recent applications
                 const tbody = document.getElementById('recent-applications-table');
@@ -409,9 +599,9 @@
                 } else {
                     const recentApps = [...apps].reverse().slice(0, 5);
                     recentApps.forEach(app => {
-                        let badgeClass = 'badge-pending';
-                        if (app.status === 'Selected') badgeClass = 'badge-selected';
-                        if (app.status === 'Rejected') badgeClass = 'badge-rejected';
+                        let badgeClass = 'bg-primary-subtle text-primary';
+                        if (app.status === 'Selected') badgeClass = 'bg-success-subtle text-success';
+                        if (app.status === 'Rejected') badgeClass = 'bg-danger-subtle text-danger';
 
                         tbody.innerHTML += `
                             <tr>
@@ -419,8 +609,8 @@
                                 <td style="color: var(--text-primary);">${app.jobTitle}</td>
                                 <td style="color: var(--text-primary);">${app.appliedDate}</td>
                                 <td>
-                                    <span class="badge-custom ${badgeClass}">
-                                        <i class="bi bi-circle-fill" style="font-size: 8px;"></i> ${app.status}
+                                    <span class="badge ${badgeClass} px-3 py-1.5 rounded-pill fw-bold">
+                                        ${app.status}
                                     </span>
                                 </td>
                             </tr>
@@ -428,7 +618,7 @@
                     });
                 }
 
-                // Render status breakdown doughnut chart
+                // Render Doughnut Chart
                 const ctxDoughnut = document.getElementById('statusDoughnutChart').getContext('2d');
                 statusChart = new Chart(ctxDoughnut, {
                     type: 'doughnut',
@@ -436,29 +626,19 @@
                         labels: ['Selected', 'Pending', 'Rejected'],
                         datasets: [{
                             data: [selectedCount, pendingCount, rejectedCount],
-                            backgroundColor: ['#10b981', '#3b82f6', '#ef4444'],
-                            borderWidth: 2,
-                            borderColor: 'var(--bg-card)'
+                            backgroundColor: ['#10b981', '#2563eb', '#ef4444'],
+                            borderWidth: 2
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: {
-                                    color: 'var(--text-primary)',
-                                    font: { size: 12 }
-                                }
-                            }
-                        },
+                        plugins: { legend: { position: 'bottom' } },
                         cutout: '70%'
                     }
                 });
 
-                // Generate application timeline labels/data
-                // Group by month
+                // Generate application monthly chart
                 const monthsGroup = {};
                 apps.forEach(app => {
                     const parts = (app.appliedDate || '').split('-');
@@ -476,36 +656,23 @@
                 activityChart = new Chart(ctxLine, {
                     type: 'bar',
                     data: {
-                        labels: activityLabels.length ? activityLabels : ['No Activity'],
+                        labels: activityLabels.length ? activityLabels : ['Current Month'],
                         datasets: [{
                             label: 'Applications Sent',
-                            data: activityData.length ? activityData : [0],
-                            backgroundColor: 'rgba(79, 70, 229, 0.75)',
-                            borderRadius: 6,
-                            borderWidth: 0
+                            data: activityData.length ? activityData : [apps.length],
+                            backgroundColor: 'rgba(37, 99, 235, 0.8)',
+                            borderRadius: 8
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: { stepSize: 1, color: 'var(--text-primary)' },
-                                grid: { color: 'rgba(0,0,0,0.05)' }
-                            },
-                            x: {
-                                ticks: { color: 'var(--text-primary)' },
-                                grid: { display: false }
-                            }
-                        }
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
                     }
                 });
 
-                // Load and render notifications
+                // Notifications Loader
                 async function loadDashboardNotifications() {
                     try {
                         const res = await API.notifications.list(user.email);
@@ -520,26 +687,23 @@
 
                         const recent = notifications.slice(0, 5);
                         container.innerHTML = recent.map(n => `
-                            <div class="d-flex align-items-start gap-3 p-3 border-bottom ${n.isRead ? 'opacity-75' : 'fw-semibold'}" style="border-color: var(--border-color) !important;">
-                                <div class="rounded-circle p-2 ${n.isRead ? 'bg-secondary' : 'bg-warning'} bg-opacity-10" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">
+                            <div class="d-flex align-items-start gap-3 p-3 border-bottom ${n.isRead ? 'opacity-75' : 'fw-semibold'}">
+                                <div class="rounded-circle p-2 ${n.isRead ? 'bg-secondary' : 'bg-warning'} bg-opacity-10 d-flex align-items-center justify-content-center" style="width:36px;height:36px;">
                                     <i class="bi ${n.isRead ? 'bi-bell' : 'bi-bell-fill'} ${n.isRead ? 'text-secondary' : 'text-warning'}"></i>
                                 </div>
                                 <div class="flex-grow-1">
                                     <p class="mb-0 small" style="color: var(--text-primary);">${n.message}</p>
                                     <span class="x-small text-muted">${n.createdAt ? new Date(n.createdAt).toLocaleDateString() : 'Recently'}</span>
                                 </div>
-                                ${!n.isRead ? '<span class="badge bg-warning rounded-circle p-1 mt-1" style="width: 8px; height: 8px;"></span>' : ''}
                             </div>
                         `).join('');
-                    } catch (err) {
-                        console.error("Failed to load notifications:", err);
-                    }
+                    } catch (err) {}
                 }
                 loadDashboardNotifications();
                 loadMainDashboardRecommendations();
 
             } catch (err) {
-                console.error("Dashboard error:", err);
+                console.error("Dashboard init error:", err);
             }
         });
 
@@ -554,9 +718,7 @@
                     recommendationsCache = res;
                     return res;
                 }
-            } catch (err) {
-                console.error('[DASHBOARD] Recommendations fetch error:', err);
-            }
+            } catch (err) {}
             return null;
         }
 
@@ -568,83 +730,37 @@
             container.innerHTML = `
                 <div class="col-12 text-center py-5">
                     <div class="spinner-border text-primary" role="status"></div>
-                    <p class="text-secondary mt-2">Comparing your profile and resume details with active job listings...</p>
+                    <p class="text-secondary mt-2">Running AI skill-matching engine...</p>
                 </div>
             `;
 
-            const user = Session.getUser();
             const data = await fetchRecommendations();
             if (!data || !data.recommendations || data.recommendations.length === 0) {
                 container.innerHTML = `
                     <div class="col-12 text-center py-5">
                         <i class="bi bi-patch-question fs-1 text-secondary"></i>
-                        <h5 class="mt-3 fw-bold" style="color: var(--text-primary) !important;">No matching jobs found</h5>
-                        <p class="text-secondary small">Try updating your skills in profile settings or check back later.</p>
+                        <h5 class="mt-3 fw-bold">No matching jobs found</h5>
+                        <p class="text-secondary small">Update your profile skills to view AI matched vacancies.</p>
                         <a href="jobseeker-profile.html" class="btn btn-primary rounded-pill mt-2">Update Profile Skills</a>
                     </div>
                 `;
                 return;
             }
 
-            // Render resume status alert
-            if (!data.hasResume) {
-                alertContainer.innerHTML = `
-                    <div class="alert alert-warning border-0 rounded-4 shadow-sm p-3 mb-4 d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="bg-warning bg-opacity-15 text-warning rounded-circle p-2 fs-4" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;">
-                                <i class="bi bi-file-earmark-arrow-up"></i>
-                            </div>
-                            <div>
-                                <strong class="d-block text-dark">Boost recommendation accuracy!</strong>
-                                <span class="text-secondary small">You haven't uploaded a resume. Upload your resume file to let our AI scan for deeper skill alignment.</span>
-                            </div>
-                        </div>
-                        <a href="resume-upload.html" class="btn btn-sm btn-warning rounded-pill px-3 fw-semibold text-decoration-none">Upload Now</a>
-                    </div>
-                `;
-            } else {
-                alertContainer.innerHTML = `
-                    <div class="alert alert-success border-0 rounded-4 shadow-sm p-3 mb-4 d-flex align-items-center gap-3">
-                        <div class="bg-success bg-opacity-15 text-success rounded-circle p-2 fs-4" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;">
-                            <i class="bi bi-file-earmark-check-fill"></i>
-                        </div>
-                        <div>
-                            <strong class="d-block text-dark">Resume scans active</strong>
-                            <span class="text-secondary small">We've extracted skills from your resume file: <code class="bg-light px-2 py-0.5 rounded text-dark">${data.skillsAnalyzed.slice(0, 8).join(', ')}${data.skillsAnalyzed.length > 8 ? '...' : ''}</code></span>
-                        </div>
-                    </div>
-                `;
-            }
-
             container.innerHTML = '';
             data.recommendations.forEach(job => {
-                let scoreBadgeColor = 'bg-danger-subtle text-danger';
-                if (job.score >= 90) scoreBadgeColor = 'bg-success-subtle text-success';
-                else if (job.score >= 80) scoreBadgeColor = 'bg-primary-subtle text-primary';
-                else if (job.score >= 65) scoreBadgeColor = 'bg-warning-subtle text-warning';
-
-                let iconClass = 'bi-laptop';
-                const title = job.title.toLowerCase();
-                if (title.includes('java') || title.includes('developer') || title.includes('engineer')) iconClass = 'bi-code-slash';
-                if (title.includes('analyst') || title.includes('data')) iconClass = 'bi-bar-chart-line';
-                if (title.includes('designer') || title.includes('ux') || title.includes('ui')) iconClass = 'bi-palette';
-
-                // Skill matching list
-                const matchedPills = job.matchedSkills.map(s => `<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill me-1 small mb-1">${s}</span>`).join('');
-                const missingPills = job.missingSkills.map(s => `<span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill me-1 small mb-1">${s}</span>`).join('');
+                let scoreBadgeClass = 'badge-match-mid';
+                if (job.score >= 85) scoreBadgeClass = 'badge-match-high';
 
                 container.innerHTML += `
                     <div class="col-md-6">
-                        <div class="premium-card p-4 h-100 d-flex flex-column justify-content-between">
+                        <div class="stat-card-gradient h-100 d-flex flex-column justify-content-between">
                             <div>
                                 <div class="d-flex justify-content-between align-items-start mb-3">
-                                    <div class="bg-light p-3 rounded-3 text-primary">
-                                        <i class="bi ${iconClass} fs-4"></i>
+                                    <div class="bg-primary bg-opacity-10 p-3 rounded-3 text-primary">
+                                        <i class="bi bi-code-slash fs-4"></i>
                                     </div>
-                                    <div class="text-end">
-                                        <span class="badge ${scoreBadgeColor} fs-6 px-3 py-1.5 rounded-pill fw-bold d-block mb-1">${job.score}% Match</span>
-                                        <span class="x-small text-muted fw-semibold">${job.rating}</span>
-                                    </div>
+                                    <span class="badge ${scoreBadgeClass} fs-6 px-3 py-1.5 rounded-pill fw-bold">${job.score}% Match</span>
                                 </div>
                                 <h4 class="fw-bold mb-1" style="color: var(--text-primary);">${job.title}</h4>
                                 <h6 class="text-primary small mb-3 fw-bold">${job.companyName}</h6>
@@ -652,35 +768,10 @@
                                 <div class="d-flex flex-wrap gap-3 mb-3 text-secondary small">
                                     <span><i class="bi bi-geo-alt me-1"></i>${job.location}</span>
                                     <span><i class="bi bi-currency-rupee me-1"></i>${job.salary}</span>
-                                    <span><i class="bi bi-briefcase me-1"></i>${job.type}</span>
-                                </div>
-                                
-                                <hr class="my-3 opacity-25">
-                                
-                                <div class="mb-3">
-                                    <h6 class="fw-semibold text-dark small mb-2"><i class="bi bi-check2-circle text-success me-1"></i>Skills Match:</h6>
-                                    <div>
-                                        ${matchedPills || '<span class="text-secondary small">No direct match</span>'}
-                                    </div>
-                                </div>
-                                
-                                ${job.missingSkills.length > 0 ? `
-                                <div class="mb-3">
-                                    <h6 class="fw-semibold text-dark small mb-2"><i class="bi bi-exclamation-circle text-warning me-1"></i>Missing Skills Needed:</h6>
-                                    <div>
-                                        ${missingPills}
-                                    </div>
-                                </div>` : ''}
-
-                                <div class="bg-light rounded-3 p-2.5 mb-3">
-                                    <h6 class="fw-semibold text-dark small mb-1"><i class="bi bi-lightbulb-fill text-warning me-1"></i>AI Advice:</h6>
-                                    <p class="text-secondary small mb-0">${job.suggestions[0]}</p>
                                 </div>
                             </div>
                             
-                            <div class="d-flex gap-2 mt-2">
-                                <a href="job-details.html?id=${job.id}" class="btn btn-sm btn-premium btn-premium-primary flex-grow-1 py-2 text-decoration-none">View & Apply Now</a>
-                            </div>
+                            <a href="job-details.html?id=${job.id}" class="btn btn-primary rounded-pill w-100 py-2 mt-3">View & Apply Now</a>
                         </div>
                     </div>
                 `;
@@ -693,45 +784,28 @@
 
             const data = await fetchRecommendations();
             if (!data || !data.recommendations || data.recommendations.length === 0) {
-                row.innerHTML = `
-                    <div class="col-12 text-center py-3">
-                        <span class="text-secondary small">No matching jobs found. Update your profile skills to get matches.</span>
-                    </div>
-                `;
+                row.innerHTML = `<div class="col-12 text-center py-3"><span class="text-secondary small">Update profile skills to get matches.</span></div>`;
                 return;
             }
 
             row.innerHTML = '';
             const top3 = data.recommendations.slice(0, 3);
             top3.forEach(job => {
-                let scoreBadgeColor = 'bg-danger-subtle text-danger';
-                if (job.score >= 90) scoreBadgeColor = 'bg-success-subtle text-success';
-                else if (job.score >= 80) scoreBadgeColor = 'bg-primary-subtle text-primary';
-                else if (job.score >= 65) scoreBadgeColor = 'bg-warning-subtle text-warning';
-
-                let iconClass = 'bi-laptop';
-                const title = job.title.toLowerCase();
-                if (title.includes('java') || title.includes('developer') || title.includes('engineer')) iconClass = 'bi-code-slash';
-                if (title.includes('analyst') || title.includes('data')) iconClass = 'bi-bar-chart-line';
-                if (title.includes('designer') || title.includes('ux') || title.includes('ui')) iconClass = 'bi-palette';
-
                 row.innerHTML += `
                     <div class="col-md-4">
-                        <div class="premium-card p-3 h-100 d-flex flex-column justify-content-between">
+                        <div class="stat-card-gradient h-100 d-flex flex-column justify-content-between">
                             <div>
                                 <div class="d-flex justify-content-between mb-3">
-                                    <div class="bg-light p-2 rounded-3 text-primary" style="height:40px;width:40px;display:flex;align-items:center;justify-content:center;">
-                                        <i class="bi ${iconClass} fs-5"></i>
+                                    <div class="bg-primary bg-opacity-10 p-2 rounded-3 text-primary" style="height:40px;width:40px;display:flex;align-items:center;justify-content:center;">
+                                        <i class="bi bi-code-slash fs-5"></i>
                                     </div>
-                                    <span class="badge ${scoreBadgeColor} rounded-pill px-2.5 py-1 small fw-bold">${job.score}% Match</span>
+                                    <span class="badge bg-success-subtle text-success rounded-pill px-2.5 py-1 small fw-bold">${job.score}% Match</span>
                                 </div>
-                                <h6 class="fw-bold mb-1 text-truncate" style="color: var(--text-primary);" title="${job.title}">${job.title}</h6>
+                                <h6 class="fw-bold mb-1 text-truncate" style="color: var(--text-primary);">${job.title}</h6>
                                 <h6 class="text-primary x-small mb-2 text-truncate">${job.companyName}</h6>
-                                <p class="x-small text-secondary mb-2" style="color: var(--text-muted) !important;"><i class="bi bi-geo-alt"></i> ${job.location}</p>
+                                <p class="x-small text-secondary mb-2"><i class="bi bi-geo-alt"></i> ${job.location}</p>
                             </div>
-                            <div class="mt-2">
-                                <a href="job-details.html?id=${job.id}" class="btn btn-sm btn-outline-primary w-100 py-1.5 x-small rounded-pill text-decoration-none">Details</a>
-                            </div>
+                            <a href="job-details.html?id=${job.id}" class="btn btn-sm btn-outline-primary rounded-pill w-100 py-1.5 mt-2">Details</a>
                         </div>
                     </div>
                 `;

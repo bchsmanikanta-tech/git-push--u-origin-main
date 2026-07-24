@@ -378,19 +378,19 @@
                             modal.show();
                             
                             const historyBox = document.getElementById('chat-history-box');
-                            historyBox.innerHTML = '<span class="text-muted small">Loading history...</span>';
+                            historyBox.innerHTML = '<span class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span> Loading history...</span>';
                             try {
-                                const res = await API.chat.getHistory(user.email, seekerEmail);
+                                const res = await API.messages.getConversation(user.email, seekerEmail);
                                 if (res && res.messages && res.messages.length) {
                                     historyBox.innerHTML = res.messages.map(m => `
-                                        <div class="mb-2 p-2 rounded ${m.senderEmail === user.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
-                                            <div>${m.message}</div>
-                                            <span class="x-small ${m.senderEmail === user.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                        <div class="mb-2 p-2.5 rounded-3 ${m.senderEmail === user.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
+                                            <div class="small fw-normal">${m.message}</div>
+                                            <span class="x-small ${m.senderEmail === user.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                                         </div>
                                     `).join('');
                                     historyBox.scrollTop = historyBox.scrollHeight;
                                 } else {
-                                    historyBox.innerHTML = '<span class="text-muted small">No message history yet. Send a message to start chatting!</span>';
+                                    historyBox.innerHTML = '<div class="text-center py-4 text-secondary small"><i class="bi bi-chat-dots fs-3 d-block mb-1"></i>No message history yet. Send a message to start chatting!</div>';
                                 }
                             } catch (err) {
                                 historyBox.innerHTML = '<span class="text-danger small">Failed to load chat history.</span>';
@@ -433,21 +433,24 @@
                 const msg = input.value.trim();
                 if (!msg) return;
                 try {
-                    await API.chat.sendMessage(user.email, receiverEmail, msg);
+                    await API.messages.send({ senderEmail: user.email, receiverEmail, message: msg });
                     input.value = '';
                     showToast('Message sent!', 'success');
                     const historyBox = document.getElementById('chat-history-box');
-                    const res = await API.chat.getHistory(user.email, receiverEmail);
+                    const res = await API.messages.getConversation(user.email, receiverEmail);
                     if (res && res.messages) {
                         historyBox.innerHTML = res.messages.map(m => `
-                            <div class="mb-2 p-2 rounded ${m.senderEmail === user.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
-                                <div>${m.message}</div>
-                                <span class="x-small ${m.senderEmail === user.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                            <div class="mb-2 p-2.5 rounded-3 ${m.senderEmail === user.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
+                                <div class="small fw-normal">${m.message}</div>
+                                <span class="x-small ${m.senderEmail === user.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                             </div>
                         `).join('');
                         historyBox.scrollTop = historyBox.scrollHeight;
                     }
                 } catch (err) {
+                    showToast(err.message || 'Failed to send message', 'error');
+                }
+            });
                     showToast('Failed to send message', 'error');
                 }
             });
