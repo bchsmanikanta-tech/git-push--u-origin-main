@@ -2094,7 +2094,7 @@ app.get('/api/chat/history', async (req, res) => {
 
 app.post('/api/interviews/schedule', async (req, res) => {
     try {
-        const { companyEmail, seekerEmail, seekerName, jobTitle, scheduledDate, scheduledTime, notes } = req.body;
+        const { companyEmail, seekerEmail, seekerName, jobTitle, applicationId, scheduledDate, scheduledTime, notes } = req.body;
         const meetLink = `https://meet.google.com/smart-job-${Math.floor(100000 + Math.random() * 900000)}`;
         
         if (mongoose.connection.readyState !== 1) {
@@ -2112,9 +2112,10 @@ app.post('/api/interviews/schedule', async (req, res) => {
             };
             memoryDB.interviews.push(mockInt);
             
+            // Auto update status in memoryDB
             const app = memoryDB.applications.find(a => 
-                a.seekerEmail === (seekerEmail || '').toLowerCase() && 
-                a.jobTitle.toLowerCase() === (jobTitle || '').toLowerCase()
+                (applicationId && (a._id === applicationId || a.id === applicationId)) ||
+                (!applicationId && a.seekerEmail === (seekerEmail || '').toLowerCase() && a.jobTitle.toLowerCase() === (jobTitle || '').toLowerCase())
             );
             if (app) app.status = 'Interview Scheduled';
             
@@ -2132,10 +2133,18 @@ app.post('/api/interviews/schedule', async (req, res) => {
             notes: notes || 'Technical & Cultural Fit Interview'
         });
         
-        await Application.findOneAndUpdate(
-            { seekerEmail: (seekerEmail || '').toLowerCase(), jobTitle: jobTitle },
-            { status: 'Interview Scheduled' }
-        );
+        // Auto update status in MongoDB
+        if (applicationId) {
+            await Application.findOneAndUpdate(
+                { $or: [{ _id: applicationId }, { id: applicationId }] },
+                { status: 'Interview Scheduled' }
+            );
+        } else {
+            await Application.findOneAndUpdate(
+                { seekerEmail: (seekerEmail || '').toLowerCase(), jobTitle: jobTitle },
+                { status: 'Interview Scheduled' }
+            );
+        }
         
         await Notification.create({
             recipientEmail: (seekerEmail || '').toLowerCase(),

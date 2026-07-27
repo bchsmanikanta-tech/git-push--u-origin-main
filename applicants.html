@@ -124,6 +124,7 @@
                     <form id="interviewForm">
                         <input type="hidden" id="int-seeker-email">
                         <input type="hidden" id="int-job-title">
+                        <input type="hidden" id="int-app-id">
                         <div class="mb-3">
                             <label class="form-label small fw-bold text-secondary">Candidate</label>
                             <input type="text" class="form-control rounded-3" id="int-seeker-name" readonly>
@@ -326,7 +327,7 @@
                             <td id="actions-${appId}">
                                 ${actionControls}
                                 <div class="d-flex justify-content-center gap-1 mt-1">
-                                    <button class="btn btn-sm btn-outline-primary rounded-3 schedule-int-btn" data-seeker-email="${app.seekerEmail}" data-seeker-name="${app.seekerName}" data-job-title="${app.jobTitle}" title="Schedule Interview"><i class="bi bi-calendar-event me-1"></i>Interview</button>
+                                    <button class="btn btn-sm btn-outline-primary rounded-3 schedule-int-btn" data-seeker-email="${app.seekerEmail}" data-seeker-name="${app.seekerName}" data-job-title="${app.jobTitle}" data-app-id="${appId}" title="Schedule Interview"><i class="bi bi-calendar-event me-1"></i>Interview</button>
                                     <button class="btn btn-sm btn-outline-secondary rounded-3 open-chat-btn" data-seeker-email="${app.seekerEmail}" data-seeker-name="${app.seekerName}" title="Chat"><i class="bi bi-chat-dots me-1"></i>Chat</button>
                                 </div>
                             </td>
@@ -352,6 +353,7 @@
                             document.getElementById('int-seeker-email').value = btn.dataset.seekerEmail || '';
                             document.getElementById('int-seeker-name').value = btn.dataset.seekerName || '';
                             document.getElementById('int-job-title').value = btn.dataset.jobTitle || '';
+                            document.getElementById('int-app-id').value = btn.dataset.appId || '';
                             const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('interviewModal'));
                             modal.show();
                         });
@@ -408,6 +410,7 @@
                     seekerEmail: document.getElementById('int-seeker-email').value,
                     seekerName: document.getElementById('int-seeker-name').value,
                     jobTitle: document.getElementById('int-job-title').value,
+                    applicationId: document.getElementById('int-app-id').value,
                     scheduledDate: document.getElementById('int-date').value,
                     scheduledTime: document.getElementById('int-time').value,
                     notes: document.getElementById('int-notes').value
@@ -494,5 +497,7 @@
             };
         });
     </script>
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
