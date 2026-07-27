@@ -12,7 +12,7 @@
     <!-- Custom Style System -->
     <link rel="stylesheet" href="style.css">
     
-    <script src="js/api.js" defer></script>
+    <script src="js/api.js?v=2" defer></script>
 </head>
 <body>
 
@@ -168,35 +168,44 @@
                 tbody.appendChild(row);
             });
 
-            // Attach click listeners AFTER rows are in DOM
-            document.querySelectorAll('.view-resume-btn').forEach(btn => {
-                btn.addEventListener('click', () => openResume(btn.dataset.appId));
-            });
+
 
             // Global chat launcher
             window.openCandidateChat = async function(companyEmail, companyName, jobTitle) {
-                if (!companyEmail || companyEmail === 'undefined') companyEmail = 'hr@techcorp.com';
-                if (!companyName || companyName === 'undefined') companyName = 'Hiring Recruiter';
-                if (!jobTitle || jobTitle === 'undefined') jobTitle = 'Job Position';
-
-                document.getElementById('chat-company-name').innerText = companyName;
-                document.getElementById('chat-company-subtext').innerText = `${jobTitle} • Recruiter Chat`;
-                document.getElementById('chat-receiver-email').value = companyEmail;
-
-                const modalEl = document.getElementById('candidateChatModal');
-                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-                modal.show();
-
-                const historyBox = document.getElementById('candidate-chat-history');
-                historyBox.innerHTML = '<div class="text-center py-4 text-secondary small"><div class="spinner-border spinner-border-sm text-primary me-1"></div> Loading conversation...</div>';
-
                 try {
-                    const res = await API.messages.getConversation(user.email, companyEmail);
+                    const currentUser = Session.getUser() || user;
+                    if (!currentUser || !currentUser.email) {
+                        showToast('Session expired. Please log in.', 'error');
+                        return;
+                    }
+                    
+                    if (!companyEmail || companyEmail === 'undefined') companyEmail = 'hr@techcorp.com';
+                    if (!companyName || companyName === 'undefined') companyName = 'Hiring Recruiter';
+                    if (!jobTitle || jobTitle === 'undefined') jobTitle = 'Job Position';
+
+                    document.getElementById('chat-company-name').innerText = companyName;
+                    document.getElementById('chat-company-subtext').innerText = `${jobTitle} • Recruiter Chat`;
+                    document.getElementById('chat-receiver-email').value = companyEmail;
+
+                    const modalEl = document.getElementById('candidateChatModal');
+                    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                    modal.show();
+
+                    const historyBox = document.getElementById('candidate-chat-history');
+                    historyBox.innerHTML = '<div class="text-center py-4 text-secondary small"><div class="spinner-border spinner-border-sm text-primary me-1"></div> Loading conversation...</div>';
+
+                    if (!API || !API.messages) {
+                        console.error('API.messages is undefined! Your browser has cached an older version of js/api.js.');
+                        historyBox.innerHTML = '<span class="text-danger small">Failed to load chat API. Please hard-refresh your browser cache (Ctrl + F5).</span>';
+                        return;
+                    }
+
+                    const res = await API.messages.getConversation(currentUser.email, companyEmail);
                     if (res && res.messages && res.messages.length) {
                         historyBox.innerHTML = res.messages.map(m => `
-                            <div class="mb-2 p-2.5 rounded-3 ${m.senderEmail === user.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
+                            <div class="mb-2 p-2.5 rounded-3 ${m.senderEmail === currentUser.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
                                 <div class="small fw-normal">${m.message}</div>
-                                <span class="x-small ${m.senderEmail === user.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                <span class="x-small ${m.senderEmail === currentUser.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                             </div>
                         `).join('');
                         historyBox.scrollTop = historyBox.scrollHeight;
@@ -204,34 +213,50 @@
                         historyBox.innerHTML = '<div class="text-center py-4 text-secondary small"><i class="bi bi-chat-dots fs-3 d-block mb-1"></i>No messages yet. Send a message to start chatting with the recruiter!</div>';
                     }
                 } catch (err) {
-                    historyBox.innerHTML = '<span class="text-danger small">Failed to load chat history.</span>';
+                    console.error('Error inside openCandidateChat:', err);
+                    showToast('Failed to open chat: ' + err.message, 'error');
                 }
             };
 
-            document.querySelectorAll('.open-candidate-chat-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    openCandidateChat(btn.dataset.companyEmail, btn.dataset.companyName, btn.dataset.jobTitle);
-                });
+            // Delegated click handler on tbody for all buttons
+            tbody.addEventListener('click', (e) => {
+                const resumeBtn = e.target.closest('.view-resume-btn');
+                if (resumeBtn) {
+                    openResume(resumeBtn.dataset.appId);
+                    return;
+                }
+
+                const chatBtn = e.target.closest('.open-candidate-chat-btn');
+                if (chatBtn) {
+                    openCandidateChat(chatBtn.dataset.companyEmail, chatBtn.dataset.companyName, chatBtn.dataset.jobTitle);
+                    return;
+                }
             });
 
             document.getElementById('candidateChatForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
+                const currentUser = Session.getUser() || user;
+                if (!currentUser || !currentUser.email) {
+                    showToast('Session expired. Please log in.', 'error');
+                    return;
+                }
+
                 const receiverEmail = document.getElementById('chat-receiver-email').value;
                 const input = document.getElementById('chat-message-input');
                 const msg = input.value.trim();
                 if (!msg) return;
                 try {
-                    await API.messages.send({ senderEmail: user.email, receiverEmail, message: msg });
+                    await API.messages.send({ senderEmail: currentUser.email, receiverEmail, message: msg });
                     input.value = '';
                     showToast('Message sent to employer!', 'success');
                     
                     const historyBox = document.getElementById('candidate-chat-history');
-                    const res = await API.messages.getConversation(user.email, receiverEmail);
+                    const res = await API.messages.getConversation(currentUser.email, receiverEmail);
                     if (res && res.messages) {
                         historyBox.innerHTML = res.messages.map(m => `
-                            <div class="mb-2 p-2.5 rounded-3 ${m.senderEmail === user.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
+                            <div class="mb-2 p-2.5 rounded-3 ${m.senderEmail === currentUser.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
                                 <div class="small fw-normal">${m.message}</div>
-                                <span class="x-small ${m.senderEmail === user.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                <span class="x-small ${m.senderEmail === currentUser.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                             </div>
                         `).join('');
                         historyBox.scrollTop = historyBox.scrollHeight;
@@ -279,5 +304,7 @@
             </div>
         </div>
     </div>
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

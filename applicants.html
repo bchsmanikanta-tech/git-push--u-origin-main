@@ -12,7 +12,7 @@
     <!-- Custom Style System -->
     <link rel="stylesheet" href="style.css">
     
-    <script src="js/api.js" defer></script>
+    <script src="js/api.js?v=2" defer></script>
 </head>
 <body>
 
@@ -101,12 +101,6 @@
                                 <span class="text-secondary d-block" style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">EXPECTED SALARY</span>
                                 <strong id="letter-expected-salary" class="text-dark" style="font-size: 13px;">-</strong>
                             </div>
-                            <div class="col-6 mt-2 text-truncate">
-                                <span class="text-secondary d-block" style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">PROFESSIONAL LINKS</span>
-                                <div id="letter-links" class="d-flex gap-2 mt-1">
-                                    <!-- Dynamic link buttons -->
-                                </div>
-                            </div>
                         </div>
                     </div>
 
@@ -117,6 +111,7 @@
                 </div>
             </div>
         </div>
+    </div>
     <!-- Interview Scheduler Modal -->
     <div class="modal fade" id="interviewModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -232,20 +227,14 @@
                 noAppsBox.classList.add('d-none');
 
                 try {
-                    const data = await API.applications.getForCompany(user.email, filterJobId);
-                    if (data && data.applications && data.applications.length > 0) {
-                        companyApps = data.applications;
+                    try {
+                        const data = await API.applications.getForCompany(user.email, filterJobId);
+                        if (data && data.applications) {
+                            companyApps = data.applications;
+                        }
+                    } catch (err) {
+                        console.warn('[APPLICANTS] Failed to fetch applications:', err.message);
                     }
-                } catch (err) {
-                    console.warn('[APPLICANTS] Using fallback applicants list:', err.message);
-                }
-
-                if (!companyApps || companyApps.length === 0) {
-                    companyApps = [
-                        { id: 'app_101', _id: 'app_101', seekerName: 'Joshitha', seekerEmail: 'joshitha@gmail.com', jobTitle: 'Senior Full Stack Engineer', appliedDate: new Date().toLocaleDateString('en-IN'), status: 'Pending', resume: null },
-                        { id: 'app_102', _id: 'app_102', seekerName: 'John Doe', seekerEmail: 'john@example.com', jobTitle: 'Frontend UI/UX Architect', appliedDate: new Date().toLocaleDateString('en-IN'), status: 'Selected', resume: null }
-                    ];
-                }
 
                 spinner.classList.add('d-none');
 
@@ -273,7 +262,7 @@
 
                     // Build rows via DOM (avoids innerHTML+= re-parse issues)
                     [...companyApps].reverse().forEach(app => {
-                        const appId = app.id || app._id;
+                        const appId = String(app.id || app._id || '');
                         let statusBadgeClass = 'badge-pending';
                         if (app.status === 'Selected') statusBadgeClass = 'badge-selected';
                         if (app.status === 'Rejected') statusBadgeClass = 'badge-rejected';
@@ -312,7 +301,7 @@
 
                         const cityState = [app.city, app.state].filter(Boolean).join(', ') || '-';
 
-                        const matchScore = 80 + (appId.charCodeAt(0) % 18);
+                        const matchScore = 80 + ((appId ? appId.charCodeAt(0) : 0) % 18);
                         const row = document.createElement('tr');
                         row.id = `app-row-${appId}`;
                         row.innerHTML = `
@@ -360,10 +349,10 @@
                     });
                     tbody.querySelectorAll('.schedule-int-btn').forEach(btn => {
                         btn.addEventListener('click', () => {
-                            document.getElementById('int-seeker-email').value = btn.dataset.seekerEmail;
-                            document.getElementById('int-seeker-name').value = btn.dataset.seekerName;
-                            document.getElementById('int-job-title').value = btn.dataset.jobTitle;
-                            const modal = new bootstrap.Modal(document.getElementById('interviewModal'));
+                            document.getElementById('int-seeker-email').value = btn.dataset.seekerEmail || '';
+                            document.getElementById('int-seeker-name').value = btn.dataset.seekerName || '';
+                            document.getElementById('int-job-title').value = btn.dataset.jobTitle || '';
+                            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('interviewModal'));
                             modal.show();
                         });
                     });
@@ -398,7 +387,13 @@
                         });
                     });
 
-                    tableWrapper.classList.remove('d-none');
+                    if (companyApps.length === 0) {
+                        noAppsBox.classList.remove('d-none');
+                        tableWrapper.classList.add('d-none');
+                    } else {
+                        noAppsBox.classList.add('d-none');
+                        tableWrapper.classList.remove('d-none');
+                    }
 
                 } catch (err) {
                     spinner.innerHTML = `<span class="text-danger small">Failed to load applicants list.</span>`;
@@ -420,7 +415,8 @@
                 try {
                     await API.interviews.schedule(data);
                     showToast('Interview invite sent! Meet link generated.', 'success');
-                    bootstrap.Modal.getInstance(document.getElementById('interviewModal')).hide();
+                    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('interviewModal'));
+                    modal.hide();
                 } catch (err) {
                     showToast(err.message || 'Failed to schedule interview', 'error');
                 }
@@ -451,16 +447,13 @@
                     showToast(err.message || 'Failed to send message', 'error');
                 }
             });
-                    showToast('Failed to send message', 'error');
-                }
-            });
 
             // Load list on boot
             loadApplicantsList();
 
             // Modal viewer for cover letters
             window.openLetterModal = function(appId) {
-                const app = companyApps.find(a => (a.id || a._id) === appId);
+                const app = companyApps.find(a => String(a.id || a._id) === String(appId));
                 if (!app) return;
 
                 document.getElementById('letter-candidate').innerText = `${app.seekerName} (${app.seekerEmail})`;
@@ -481,29 +474,6 @@
                 document.getElementById('letter-experience').innerText = app.experienceYears ? `${app.experienceYears} Years` : 'Not Specified';
                 document.getElementById('letter-expected-salary').innerText = app.expectedSalary ? `${app.expectedSalary} LPA` : 'Not Specified';
 
-                const linksBox = document.getElementById('letter-links');
-                linksBox.innerHTML = '';
-                if (app.githubProfile) {
-                    const gh = document.createElement('a');
-                    gh.href = app.githubProfile;
-                    gh.target = '_blank';
-                    gh.className = 'btn btn-xs btn-outline-dark px-2 py-0 rounded-pill d-inline-flex align-items-center gap-1';
-                    gh.style.fontSize = '11px';
-                    gh.innerHTML = '<i class="bi bi-github"></i> GitHub';
-                    linksBox.appendChild(gh);
-                }
-                if (app.linkedinProfile) {
-                    const li = document.createElement('a');
-                    li.href = app.linkedinProfile;
-                    li.target = '_blank';
-                    li.className = 'btn btn-xs btn-outline-primary px-2 py-0 rounded-pill d-inline-flex align-items-center gap-1';
-                    li.style.fontSize = '11px';
-                    li.innerHTML = '<i class="bi bi-linkedin"></i> LinkedIn';
-                    linksBox.appendChild(li);
-                }
-                if (!app.githubProfile && !app.linkedinProfile) {
-                    linksBox.innerHTML = '<span class="text-secondary small">-</span>';
-                }
 
                 const letterModal = new bootstrap.Modal(document.getElementById('letterModal'));
                 letterModal.show();

@@ -134,16 +134,6 @@
                     </div>
                 </div>
 
-                <div class="row fade-up-element" style="animation-delay: 0.34s;">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">GitHub Profile URL</label>
-                        <input type="url" id="github-profile" class="form-control form-control-custom" placeholder="https://github.com/username">
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">LinkedIn Profile URL</label>
-                        <input type="url" id="linkedin-profile" class="form-control form-control-custom" placeholder="https://linkedin.com/in/username">
-                    </div>
-                </div>
 
                 <div class="mb-3 fade-up-element" style="animation-delay: 0.36s;">
                     <label class="form-label fw-semibold mb-2 d-block">Do you have a Certification?</label>
@@ -327,20 +317,27 @@
                 const qualVal = document.getElementById('qualification').value;
                 const expVal = document.getElementById('experience-years').value.trim();
                 const salVal = document.getElementById('expected-salary').value.trim();
-                const githubVal = document.getElementById('github-profile').value.trim();
-                const linkedinVal = document.getElementById('linkedin-profile').value.trim();
 
-                let finalResumeFilename = seekerProfile.resume || '';
+                let finalResumeFilename = (seekerProfile && seekerProfile.resume) ? seekerProfile.resume : '';
                 let certificationUrl = '';
 
                 try {
                     // Check if new resume file was selected
-                    if (fileInput.files.length > 0) {
+                    if (fileInput && fileInput.files && fileInput.files.length > 0) {
                         showToast("Uploading resume file first...", "info");
-                        const uploadRes = await API.profile.uploadResume(user.email, fileInput.files[0]);
-                        // Use the Base64 data URL (uploadRes.url), not the original filename
-                        finalResumeFilename = uploadRes.url || uploadRes.filename;
-                    } else if (seekerProfile.resume && checkboxUseExisting && checkboxUseExisting.checked) {
+                        try {
+                            const uploadRes = await API.profile.uploadResume(user.email, fileInput.files[0]);
+                            finalResumeFilename = uploadRes.url || uploadRes.resume || uploadRes.filename;
+                        } catch (uploadErr) {
+                            console.warn("[RESUME UPLOAD WARN] Using client-side FileReader fallback:", uploadErr.message);
+                            finalResumeFilename = await new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onload = (e) => resolve(e.target.result);
+                                reader.onerror = () => resolve('');
+                                reader.readAsDataURL(fileInput.files[0]);
+                            });
+                        }
+                    } else if (seekerProfile && seekerProfile.resume) {
                         // Use existing resume
                         finalResumeFilename = seekerProfile.resume;
                     } else {
@@ -349,9 +346,10 @@
                     }
 
                     // Check if certificate needs to be uploaded
-                    if (document.getElementById('cert-yes').checked) {
+                    const certYes = document.getElementById('cert-yes');
+                    if (certYes && certYes.checked) {
                         const certFileInput = document.getElementById('certificate-file');
-                        if (certFileInput.files.length > 0) {
+                        if (certFileInput && certFileInput.files && certFileInput.files.length > 0) {
                             showToast("Uploading certificate file...", "info");
                             const uploadCertRes = await API.profile.uploadCertificate(certFileInput.files[0]);
                             certificationUrl = uploadCertRes.url;
@@ -362,7 +360,7 @@
 
                     // Submit application
                     const appData = {
-                        jobId: jobDetails.id,
+                        jobId: jobDetails.id || jobDetails._id,
                         jobTitle: jobDetails.title,
                         companyEmail: jobDetails.companyEmail,
                         companyName: jobDetails.companyName,
@@ -375,8 +373,6 @@
                         address: addressVal,
                         city: cityVal,
                         state: stateVal,
-                        githubProfile: githubVal,
-                        linkedinProfile: linkedinVal,
                         experienceYears: expVal,
                         qualification: qualVal,
                         expectedSalary: salVal

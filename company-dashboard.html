@@ -324,7 +324,7 @@
 
                 // Load interviews count
                 try {
-                    const intRes = await API.interviews.listForCompany(user.email);
+                    const intRes = await API.interviews.getByUser(user.email);
                     document.getElementById('stat-meets-count').innerText = (intRes.interviews || []).length;
                 } catch(e) {
                     document.getElementById('stat-meets-count').innerText = '0';

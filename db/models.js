@@ -29,6 +29,7 @@ const companySchema = new mongoose.Schema({
 // ─── Job ─────────────────────────────────────────────────────────────────────
 const jobSchema = new mongoose.Schema({
     _id:         { type: String },
+    id:          { type: String },
     title:       { type: String, required: true },
     companyEmail:{ type: String, required: true, lowercase: true },
     companyName: { type: String, required: true },
@@ -41,11 +42,12 @@ const jobSchema = new mongoose.Schema({
     status:      { type: String, default: 'Active' },
     featured:    { type: Boolean, default: false },
     createdAt:   { type: String, default: () => new Date().toISOString() }
-}, { _id: false });
+}, { timestamps: true });
 
 // ─── Application ─────────────────────────────────────────────────────────────
 const applicationSchema = new mongoose.Schema({
     _id:          { type: String },
+    id:           { type: String },
     jobId:        { type: String, required: true },
     jobTitle:     { type: String, required: true },
     companyEmail: { type: String, required: true, lowercase: true },
@@ -66,7 +68,7 @@ const applicationSchema = new mongoose.Schema({
     experienceYears:{ type: String, default: '' },
     qualification:{ type: String, default: '' },
     expectedSalary:{ type: String, default: '' }
-}, { _id: false, timestamps: true });
+}, { timestamps: true });
 
 // ─── Admin ───────────────────────────────────────────────────────────────────
 const adminSchema = new mongoose.Schema({

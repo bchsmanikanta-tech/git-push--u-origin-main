@@ -141,6 +141,9 @@
                         <a href="my-applications.html" class="menu-link">
                             <i class="bi bi-file-earmark-text"></i> Application History
                         </a>
+                        <a href="application-tracker.html" class="menu-link text-warning fw-semibold">
+                            <i class="bi bi-calendar-event"></i> Interviews & Tracker
+                        </a>
                         <a href="resume-analyzer.html" class="menu-link text-purple fw-semibold">
                             <i class="bi bi-file-earmark-check"></i> ATS Resume Match
                         </a>
@@ -244,15 +247,17 @@
                         </div>
 
                         <div class="col-md-3">
-                            <div class="stat-card-gradient">
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <span class="text-secondary small fw-bold text-uppercase">Saved Jobs</span>
-                                    <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning">
-                                        <i class="bi bi-star-fill fs-5"></i>
+                            <a href="application-tracker.html" class="text-decoration-none">
+                                <div class="stat-card-gradient">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <span class="text-secondary small fw-bold text-uppercase">Scheduled Meets</span>
+                                        <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning">
+                                            <i class="bi bi-calendar-event-fill fs-5"></i>
+                                        </div>
                                     </div>
+                                    <h2 class="fw-bold mb-0 text-dark" id="stat-interviews-count">0</h2>
                                 </div>
-                                <h2 class="fw-bold mb-0 text-dark" id="stat-saved-count">0</h2>
-                            </div>
+                            </a>
                         </div>
                     </div>
 
@@ -577,10 +582,10 @@
                 const pendingCount = apps.filter(a => a.status === 'Pending').length;
                 document.getElementById('stat-selected-jobs').innerText = selectedCount;
 
-                // Load bookmarks count
+                // Load interviews count
                 try {
-                    const savedRes = await API.savedJobs.list(user.email);
-                    document.getElementById('stat-saved-count').innerText = (savedRes.jobs || []).length;
+                    const intRes = await API.interviews.getByUser(user.email);
+                    document.getElementById('stat-interviews-count').innerText = (intRes.interviews || []).length;
                 } catch(e) {}
 
                 // Render recent applications

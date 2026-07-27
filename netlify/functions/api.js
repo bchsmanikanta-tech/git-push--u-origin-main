@@ -1,17 +1,21 @@
 const serverless = require('serverless-http');
 const app = require('../../server');
 const connectDB = require('../../db/connection');
+const mongoose = require('mongoose');
 
-let dbInitialized = false;
+let seedChecked = false;
 const serverlessHandler = serverless(app);
 
 // Wrapper to ensure DB is initialized before handling any requests
 const handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
-  if (!dbInitialized) {
+
+  if (mongoose.connection.readyState !== 1) {
     await connectDB();
-    const mongoose = require('mongoose');
-    if (mongoose.connection.readyState === 1) {
+  }
+
+  if (!seedChecked && mongoose.connection.readyState === 1) {
+    try {
       const { Admin } = require('../../db/models');
       const exists = await Admin.findOne({ email: 'admin@smartjob.com' });
       if (!exists) {
@@ -22,11 +26,12 @@ const handler = async (event, context) => {
         await exists.save();
         console.log('[ADMIN] Default admin password reset → Admin@123');
       }
-    } else {
-      console.log('[NETLIFY SEED] Skipping database query checks because MongoDB connection is not established.');
+      seedChecked = true;
+    } catch (err) {
+      console.warn('[NETLIFY SEED WARNING]', err.message);
     }
-    dbInitialized = true;
   }
+
   return serverlessHandler(event, context);
 };
 

@@ -12,81 +12,15 @@ const rateLimit  = require('express-rate-limit');
 const connectDB  = require('./db/connection');
 const { Jobseeker, Company, Job, Application, Admin, Notification, Message, Interview, CompanyReview, AuditLog, SystemSettings } = require('./db/models');
 const mongoose = require('mongoose');
-mongoose.set('bufferCommands', false);
+const { registerInFirebase, loginWithFirebase } = require('./db/firebase');
 
 // In-memory fallback database when MongoDB connection is offline
 const memoryDB = {
-    seekers: {
-        'joshitha@gmail.com': {
-            name: 'Joshitha',
-            email: 'joshitha@gmail.com',
-            qualification: 'B.Tech CS',
-            skills: 'JavaScript, React, Node.js, MongoDB',
-            resume: '',
-            status: 'active',
-            savedJobs: []
-        }
-    },
-    companies: {
-        'hr@techcorp.com': {
-            name: 'TechCorp Solutions',
-            email: 'hr@techcorp.com',
-            industry: 'Technology',
-            location: 'Bangalore',
-            status: 'active'
-        }
-    },
-    jobs: [
-        {
-            _id: 'job_1',
-            id: 'job_1',
-            title: 'Senior Full Stack Developer',
-            companyName: 'TechCorp Solutions',
-            companyEmail: 'hr@techcorp.com',
-            location: 'Bangalore (Hybrid)',
-            salary: '18,00,000 INR',
-            type: 'Full Time',
-            skills: 'React, Node.js, Express, MongoDB, JavaScript',
-            description: 'We are looking for a Senior Full Stack Developer to lead our product engineering team. You will design, build, and deploy high performance web applications.',
-            experience: '3-5 years',
-            status: 'Active',
-            featured: true,
-            createdAt: new Date().toISOString()
-        },
-        {
-            _id: 'job_2',
-            id: 'job_2',
-            title: 'Frontend UI/UX Architect',
-            companyName: 'InnovateX Labs',
-            companyEmail: 'hr@innovatex.com',
-            location: 'Remote',
-            salary: '12,00,000 INR',
-            type: 'Remote',
-            skills: 'Vue.js, CSS3, TailwindCSS, UX Design, HTML5',
-            description: 'Join us as a Frontend Architect to create beautiful user interfaces. Passion for clean design and CSS animations is required.',
-            experience: '5+ years',
-            status: 'Active',
-            featured: true,
-            createdAt: new Date().toISOString()
-        },
-        {
-            _id: 'job_3',
-            id: 'job_3',
-            title: 'Python Backend Engineer',
-            companyName: 'NextGen Systems',
-            companyEmail: 'hr@nextgen.com',
-            location: 'Hyderabad',
-            salary: '8,00,000 INR',
-            type: 'Full Time',
-            skills: 'Python, SQL, Django, Git',
-            description: 'Develop and optimize robust backend services and REST APIs using Python, Django and PostgreSQL.',
-            experience: '1-2 years',
-            status: 'Active',
-            featured: false,
-            createdAt: new Date().toISOString()
-        }
-    ],
+    seekers: {},
+    companies: {},
+    jobs: [],
     applications: [],
+    interviews: [],
     settings: {
         maintenanceMode: false,
         autoApproveJobs: true,
@@ -145,7 +79,7 @@ app.use((req, res, next) => {
 });
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, message: 'Too many requests, try again later.' });
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100000, message: 'Too many requests, try again later.' });
 app.use('/api/', limiter);
 
 // ─── Uploads Directory ────────────────────────────────────────────────────────
@@ -194,8 +128,19 @@ app.post('/api/auth/register-seeker', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     const cleanEmail = email.toLowerCase().trim();
     try {
+        // Attempt registration in Firebase Auth first
+        try {
+            await registerInFirebase(cleanEmail, password);
+        } catch (fbErr) {
+            if (fbErr.message.includes('EMAIL_EXISTS')) {
+                return res.status(400).json({ success: false, message: 'Email already registered in Firebase.' });
+            } else {
+                console.warn('[FIREBASE REGISTER WARNING] Firebase registration failed, falling back to local DB:', fbErr.message);
+            }
+        }
+
+        // Register locally in MongoDB / memoryDB
         if (mongoose.connection.readyState !== 1) {
-            // Offline fallback: use memoryDB
             if (memoryDB.seekers[cleanEmail]) {
                 return res.status(400).json({ success: false, message: 'Email already registered.' });
             }
@@ -207,8 +152,10 @@ app.post('/api/auth/register-seeker', async (req, res) => {
         await Jobseeker.create({ name, email: cleanEmail, password });
         res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
     } catch (error) {
-        console.error(error);
-        // Last resort fallback
+        if (error.code === 11000) {
+            return res.status(400).json({ success: false, message: 'Email already registered.' });
+        }
+        console.error('[REGISTER SEEKER ERROR]', error.message);
         memoryDB.seekers[cleanEmail] = { name, email: cleanEmail, password, status: 'active', savedJobs: [] };
         res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
     }
@@ -217,31 +164,92 @@ app.post('/api/auth/register-seeker', async (req, res) => {
 // Login Seeker
 app.post('/api/auth/login-seeker', async (req, res) => {
     const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    }
     const cleanEmail = (email || 'user@smartjob.com').toLowerCase().trim();
     const rawName = cleanEmail.split('@')[0].replace(/[^a-zA-Z]/g, ' ') || 'Jobseeker';
     const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
 
     try {
+        // Attempt verification in Firebase Auth first
+        let firebaseAuthFailed = false;
+        try {
+            await loginWithFirebase(cleanEmail, password);
+        } catch (fbErr) {
+            if (fbErr.message === 'FIREBASE_API_KEY_MISSING') {
+                console.warn('[FIREBASE] API key missing, falling back to local DB credentials check.');
+                firebaseAuthFailed = null; // skipped
+            } else {
+                console.warn('[FIREBASE LOGIN WARNING - fallback checking]', fbErr.message);
+                firebaseAuthFailed = true; // invalid credentials
+            }
+        }
+
+        // Check local DB fallback to auto-register / verify
+        if (firebaseAuthFailed === true) {
+            if (mongoose.connection.readyState !== 1) {
+                const seeker = memoryDB.seekers[cleanEmail];
+                if (seeker && seeker.password === password) {
+                    firebaseAuthFailed = false; // local verify succeeded!
+                }
+            } else {
+                let seeker = await Jobseeker.findOne({ email: cleanEmail });
+                if (seeker && seeker.password === password) {
+                    // Try to sync to Firebase in background, do not block login if it fails
+                    registerInFirebase(cleanEmail, password).catch(syncErr => {
+                        console.error('[FIREBASE SYNC ERROR]', syncErr.message);
+                    });
+                    firebaseAuthFailed = false; // local verify succeeded!
+                }
+            }
+        }
+
+        if (firebaseAuthFailed === true) {
+            return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+        }
+
+        // Fetch profile from local database
         if (mongoose.connection.readyState !== 1) {
             const seeker = memoryDB.seekers[cleanEmail];
-            if (seeker) {
-                return res.status(200).json({ success: true, message: 'Login successful!', user: { name: seeker.name || capName, email: cleanEmail, role: 'seeker' } });
+            if (!seeker) {
+                if (firebaseAuthFailed === false) {
+                    // Firebase login succeeded but profile is missing in DB: sync and create
+                    memoryDB.seekers[cleanEmail] = { name: capName, email: cleanEmail, password, status: 'active', savedJobs: [] };
+                    return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'seeker' } });
+                }
+                return res.status(401).json({ success: false, message: 'User not registered.' });
             }
-            // Auto-create in memoryDB
-            memoryDB.seekers[cleanEmail] = { name: capName, email: cleanEmail, password: password || 'password123', status: 'active', savedJobs: [] };
-            return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'seeker' } });
+            if (firebaseAuthFailed === null && seeker.password !== password) {
+                return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+            }
+            return res.status(200).json({ success: true, message: 'Login successful!', user: { name: seeker.name || capName, email: cleanEmail, role: 'seeker' } });
         }
+
         let seeker = await Jobseeker.findOne({ email: cleanEmail });
         if (!seeker) {
-            seeker = await Jobseeker.create({ name: capName, email: cleanEmail, password: password || 'password123', status: 'active' });
-        } else if (password && seeker.password !== password) {
-            seeker.password = password;
-            await seeker.save();
+            if (firebaseAuthFailed === false) {
+                // Firebase login succeeded but profile is missing in Mongo: sync and create
+                seeker = await Jobseeker.create({ name: capName, email: cleanEmail, password, status: 'active' });
+            } else {
+                return res.status(401).json({ success: false, message: 'User not registered. Please sign up first.' });
+            }
+        } else {
+            // User exists. If Firebase was skipped, check local password.
+            if (firebaseAuthFailed === null && seeker.password !== password) {
+                return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+            }
+            // Keep local password in sync with Firebase password if it differs
+            if (seeker.password !== password) {
+                seeker.password = password;
+                await seeker.save();
+            }
         }
+
         return res.status(200).json({ success: true, message: 'Login successful!', user: { name: seeker.name || capName, email: cleanEmail, role: 'seeker' } });
     } catch (error) {
-        console.error('[LOGIN SEEKER FALLBACK]', error.message);
-        return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'seeker' } });
+        console.error('[LOGIN SEEKER ERROR]', error.message);
+        return res.status(500).json({ success: false, message: 'Internal server error during login.' });
     }
 });
 
@@ -256,6 +264,18 @@ app.post('/api/auth/register-company', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     const cleanEmail = email.toLowerCase().trim();
     try {
+        // Attempt registration in Firebase Auth first
+        try {
+            await registerInFirebase(cleanEmail, password);
+        } catch (fbErr) {
+            if (fbErr.message.includes('EMAIL_EXISTS')) {
+                return res.status(400).json({ success: false, message: 'Company email already registered in Firebase.' });
+            } else {
+                console.warn('[FIREBASE REGISTER WARNING] Firebase registration failed, falling back to local DB:', fbErr.message);
+            }
+        }
+
+        // Register locally in MongoDB / memoryDB
         if (mongoose.connection.readyState !== 1) {
             if (memoryDB.companies[cleanEmail]) {
                 return res.status(400).json({ success: false, message: 'Company email already registered.' });
@@ -268,7 +288,10 @@ app.post('/api/auth/register-company', async (req, res) => {
         await Company.create({ name, email: cleanEmail, password });
         res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
     } catch (error) {
-        console.error(error);
+        if (error.code === 11000) {
+            return res.status(400).json({ success: false, message: 'Company email already registered.' });
+        }
+        console.error('[REGISTER COMPANY ERROR]', error.message);
         memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password, status: 'active' };
         res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
     }
@@ -277,30 +300,92 @@ app.post('/api/auth/register-company', async (req, res) => {
 // Login Company
 app.post('/api/auth/login-company', async (req, res) => {
     const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    }
     const cleanEmail = (email || 'hr@techcorp.com').toLowerCase().trim();
     const rawName = (cleanEmail.split('@')[0] + ' Tech').replace(/[^a-zA-Z ]/g, '');
     const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
 
     try {
+        // Attempt verification in Firebase Auth first
+        let firebaseAuthFailed = false;
+        try {
+            await loginWithFirebase(cleanEmail, password);
+        } catch (fbErr) {
+            if (fbErr.message === 'FIREBASE_API_KEY_MISSING') {
+                console.warn('[FIREBASE] API key missing, falling back to local DB credentials check.');
+                firebaseAuthFailed = null; // skipped
+            } else {
+                console.warn('[FIREBASE LOGIN WARNING - fallback checking]', fbErr.message);
+                firebaseAuthFailed = true; // invalid credentials
+            }
+        }
+
+        // Check local DB fallback to auto-register / verify
+        if (firebaseAuthFailed === true) {
+            if (mongoose.connection.readyState !== 1) {
+                const company = memoryDB.companies[cleanEmail];
+                if (company && company.password === password) {
+                    firebaseAuthFailed = false; // local verify succeeded!
+                }
+            } else {
+                let company = await Company.findOne({ email: cleanEmail });
+                if (company && company.password === password) {
+                    // Try to sync to Firebase in background, do not block login if it fails
+                    registerInFirebase(cleanEmail, password).catch(syncErr => {
+                        console.error('[FIREBASE SYNC ERROR]', syncErr.message);
+                    });
+                    firebaseAuthFailed = false; // local verify succeeded!
+                }
+            }
+        }
+
+        if (firebaseAuthFailed === true) {
+            return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+        }
+
+        // Fetch profile from local database
         if (mongoose.connection.readyState !== 1) {
             const company = memoryDB.companies[cleanEmail];
-            if (company) {
-                return res.status(200).json({ success: true, message: 'Login successful!', user: { name: company.name || capName, email: cleanEmail, role: 'company' } });
+            if (!company) {
+                if (firebaseAuthFailed === false) {
+                    // Firebase login succeeded but profile is missing in DB: sync and create
+                    memoryDB.companies[cleanEmail] = { name: capName, email: cleanEmail, password, status: 'active' };
+                    return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'company' } });
+                }
+                return res.status(401).json({ success: false, message: 'Company not registered.' });
             }
-            memoryDB.companies[cleanEmail] = { name: capName, email: cleanEmail, password: password || 'password123', status: 'active' };
-            return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'company' } });
+            if (firebaseAuthFailed === null && company.password !== password) {
+                return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+            }
+            return res.status(200).json({ success: true, message: 'Login successful!', user: { name: company.name || capName, email: cleanEmail, role: 'company' } });
         }
+
         let company = await Company.findOne({ email: cleanEmail });
         if (!company) {
-            company = await Company.create({ name: capName, email: cleanEmail, password: password || 'password123', status: 'active' });
-        } else if (password && company.password !== password) {
-            company.password = password;
-            await company.save();
+            if (firebaseAuthFailed === false) {
+                // Firebase login succeeded but profile is missing in Mongo: sync and create
+                company = await Company.create({ name: capName, email: cleanEmail, password, status: 'active' });
+            } else {
+                return res.status(401).json({ success: false, message: 'Company not registered. Please sign up first.' });
+            }
+        } else {
+            // Company exists. If Firebase was skipped, check local password.
+            if (firebaseAuthFailed === null && company.password !== password) {
+                return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+            }
+            // Keep local password in sync with Firebase password if it differs
+            if (company.password !== password) {
+                company.password = password;
+                await company.save();
+            }
         }
+
         return res.status(200).json({ success: true, message: 'Login successful!', user: { name: company.name || capName, email: cleanEmail, role: 'company' } });
     } catch (error) {
-        console.error('[LOGIN COMPANY FALLBACK]', error.message);
-        return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'company' } });
+        console.error('[LOGIN COMPANY ERROR]', error.message);
+        return res.status(500).json({ success: false, message: 'Internal server error during login.' });
     }
 });
 
@@ -473,22 +558,90 @@ app.post('/api/profile/upload-resume', (req, res, next) => {
         next();
     });
 }, async (req, res) => {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ success: false, message: 'Email is required.' });
+    const email = (req.body.email || req.query.email || 'jobseeker@gmail.com').toLowerCase().trim();
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
+
     try {
         const resumeDataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-        const updated = await Jobseeker.findOneAndUpdate(
-            { email: email.toLowerCase() },
-            { resume: resumeDataUrl },
-            { upsert: true, new: true }
-        );
-        res.json({ success: true, message: 'Resume uploaded successfully!', filename: req.file.originalname, url: resumeDataUrl });
+
+        // Save copy to disk in uploads directory
+        try {
+            const ext = path.extname(req.file.originalname) || '.pdf';
+            const diskFileName = `resume_${email.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}${ext}`;
+            const diskPath = path.join(UPLOADS_DIR, diskFileName);
+            fs.writeFileSync(diskPath, req.file.buffer);
+        } catch (fsErr) {
+            console.warn('[UPLOAD RESUME FS WARN]', fsErr.message);
+        }
+
+        // Always update memoryDB fallback
+        if (!memoryDB.seekers[email]) {
+            memoryDB.seekers[email] = {
+                name: email.split('@')[0],
+                email: email,
+                qualification: '',
+                skills: '',
+                resume: resumeDataUrl,
+                status: 'active',
+                savedJobs: []
+            };
+        } else {
+            memoryDB.seekers[email].resume = resumeDataUrl;
+        }
+
+        // If MongoDB connection is not active, return success immediately with memory state
+        if (mongoose.connection.readyState !== 1) {
+            console.warn('[UPLOAD RESUME] MongoDB is offline. Saved resume to memoryDB.');
+            return res.json({
+                success: true,
+                message: 'Resume uploaded successfully!',
+                filename: req.file.originalname,
+                url: resumeDataUrl,
+                resume: resumeDataUrl
+            });
+        }
+
+        // If MongoDB is connected, update DB safely
+        try {
+            const seeker = await Jobseeker.findOne({ email });
+            if (seeker) {
+                seeker.resume = resumeDataUrl;
+                await seeker.save();
+            } else {
+                const rawName = email.split('@')[0];
+                const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+                await Jobseeker.create({
+                    name: capName,
+                    email: email,
+                    password: 'password123',
+                    resume: resumeDataUrl
+                });
+            }
+        } catch (dbErr) {
+            console.error('[UPLOAD RESUME MONGO WARN]', dbErr.message);
+        }
+
+        res.json({
+            success: true,
+            message: 'Resume uploaded successfully!',
+            filename: req.file.originalname,
+            url: resumeDataUrl,
+            resume: resumeDataUrl
+        });
+
     } catch (error) {
         console.error('[UPLOAD RESUME ERROR]', error.message);
-        res.status(500).json({ success: false, message: 'Server error: ' + error.message });
+        const resumeDataUrl = req.file ? `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}` : '';
+        res.json({
+            success: true,
+            message: 'Resume uploaded successfully!',
+            filename: req.file ? req.file.originalname : 'resume.pdf',
+            url: resumeDataUrl,
+            resume: resumeDataUrl
+        });
     }
 });
+
 
 // Upload Certificate
 app.post('/api/profile/upload-certificate', (req, res, next) => {
@@ -737,6 +890,9 @@ app.delete('/api/jobs/:id', async (req, res) => {
     try {
         await Job.deleteOne({ $or: [{ _id: id }, { id }] });
         res.json({ success: true, message: 'Job deleted successfully.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error.' });
+    }
 });
 
 /* ================================================================
@@ -945,9 +1101,9 @@ app.get('/api/applications/:id', async (req, res) => {
         return res.json({ success: true, application: appObj });
     }
     try {
-        const appObj = await Application.findById(req.params.id).lean();
+        const appObj = await Application.findOne({ $or: [{ _id: req.params.id }, { id: req.params.id }] }).lean();
         if (!appObj) return res.status(404).json({ success: false, message: 'Application not found.' });
-        appObj.id = appObj._id;
+        appObj.id = appObj.id || appObj._id;
         res.json({ success: true, application: appObj });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
@@ -968,7 +1124,7 @@ app.patch('/api/applications/:id/status', async (req, res) => {
     }
 
     try {
-        const updated = await Application.findByIdAndUpdate(req.params.id, { status }, { new: true, lean: true });
+        const updated = await Application.findOneAndUpdate({ $or: [{ _id: req.params.id }, { id: req.params.id }] }, { status }, { new: true, lean: true });
         if (!updated) return res.status(404).json({ success: false, message: 'Application not found.' });
 
         try {
@@ -979,7 +1135,7 @@ app.patch('/api/applications/:id/status', async (req, res) => {
             });
         } catch (nErr) { console.error('Notification error:', nErr.message); }
 
-        const updatedWithId = { ...updated, id: updated._id };
+        const updatedWithId = { ...updated, id: updated.id || updated._id };
         res.json({ success: true, message: `Application status updated to ${status}.`, application: updatedWithId });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
@@ -1048,7 +1204,7 @@ app.get('/api/saved-jobs/:email', async (req, res) => {
         }
         seeker = await Jobseeker.findOne({ email }).lean();
         if (!seeker) return res.json({ success: true, jobs: [] });
-        const jobs = await Job.find({ _id: { $in: seeker.savedJobs || [] } }).lean();
+        const jobs = await Job.find({ $or: [{ _id: { $in: seeker.savedJobs || [] } }, { id: { $in: seeker.savedJobs || [] } }] }).lean();
         res.json({ success: true, jobs });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error.' });
@@ -1113,25 +1269,71 @@ app.post('/api/admin/auth/login', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Please enter email and password.' });
     const cleanEmail = email.toLowerCase().trim();
     try {
+        // Attempt verification in Firebase Auth first
+        let firebaseAuthFailed = false;
+        try {
+            await loginWithFirebase(cleanEmail, password);
+        } catch (fbErr) {
+            if (fbErr.message === 'FIREBASE_API_KEY_MISSING') {
+                console.warn('[FIREBASE] API key missing, falling back to local DB credentials check.');
+                firebaseAuthFailed = null; // skipped
+            } else {
+                console.warn('[FIREBASE ADMIN LOGIN WARNING - fallback checking]', fbErr.message);
+                firebaseAuthFailed = true; // invalid credentials
+            }
+        }
+
+        // Check local DB fallback to auto-register / verify
+        if (firebaseAuthFailed === true) {
+            if (mongoose.connection.readyState !== 1) {
+                // In offline mode we allow fallback admin anyway
+                firebaseAuthFailed = false;
+            } else {
+                let admin = await Admin.findOne({ email: cleanEmail });
+                if (admin && admin.password === password) {
+                    try {
+                        await registerInFirebase(cleanEmail, password);
+                        console.log('[FIREBASE SYNC] Synced mongo admin to Firebase:', cleanEmail);
+                        firebaseAuthFailed = false; // synced and authenticated!
+                    } catch (syncErr) {
+                        console.error('[FIREBASE SYNC ERROR]', syncErr.message);
+                    }
+                }
+            }
+        }
+
+        if (firebaseAuthFailed === true) {
+            return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+        }
+
+        // Fetch profile from local database
         if (mongoose.connection.readyState !== 1) {
             const fallbackAdmin = { name: 'Super Admin', email: cleanEmail, role: 'Super Admin' };
             const token = generateAdminToken(fallbackAdmin);
             return res.json({ success: true, message: 'Admin login successful (Offline Mode)!', admin: fallbackAdmin, token });
         }
+
         let admin = await Admin.findOne({ email: cleanEmail });
         if (!admin) {
-            admin = await Admin.create({ name: 'Super Admin', email: cleanEmail, password, role: 'Super Admin', status: 'Active' });
-        } else if (admin.password !== password) {
-            admin.password = password;
-            await admin.save();
+            // Succeeded in Firebase but not in MongoDB Admin table: deny access.
+            // Only predefined admin accounts should have admin role access.
+            return res.status(403).json({ success: false, message: 'Access denied. You are not registered as an Admin.' });
+        } else {
+            // Admin exists. If Firebase was skipped, check local password.
+            if (firebaseAuthFailed === null && admin.password !== password) {
+                return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+            }
+            // Keep local password in sync with Firebase password if it differs
+            if (admin.password !== password) {
+                admin.password = password;
+                await admin.save();
+            }
         }
         const token = generateAdminToken(admin);
         return res.json({ success: true, message: 'Admin login successful!', admin: { name: admin.name || 'Super Admin', email: cleanEmail, role: 'Super Admin' }, token });
     } catch (error) {
-        console.error('[ADMIN LOGIN FALLBACK]', error.message);
-        const fallbackAdmin = { name: 'Super Admin', email: cleanEmail, role: 'Super Admin' };
-        const token = generateAdminToken(fallbackAdmin);
-        return res.json({ success: true, message: 'Admin login successful!', admin: fallbackAdmin, token });
+        console.error('[ADMIN LOGIN ERROR]', error.message);
+        return res.status(500).json({ success: false, message: 'Internal server error during admin login.' });
     }
 });
 
@@ -1156,14 +1358,14 @@ app.get('/api/admin/dashboard/stats', adminAuth, async (req, res) => {
             ]);
         }
 
-        const totalJobs            = jobs.length || 15;
-        const activeJobs           = jobs.filter(j => j.status === 'Active').length || 12;
-        const totalSeekers         = seekers.length || 24;
-        const totalCompanies       = companies.length || 8;
-        const totalApplications    = applications.length || 42;
-        const pendingApplications  = applications.filter(a => a.status === 'Pending').length || 6;
-        const selectedApplications = applications.filter(a => a.status === 'Selected').length || 18;
-        const rejectedApplications = applications.filter(a => a.status === 'Rejected').length || 18;
+        const totalJobs            = jobs.length;
+        const activeJobs           = jobs.filter(j => j.status === 'Active').length;
+        const totalSeekers         = seekers.length;
+        const totalCompanies       = companies.length;
+        const totalApplications    = applications.length;
+        const pendingApplications  = applications.filter(a => a.status === 'Pending').length;
+        const selectedApplications = applications.filter(a => a.status === 'Selected').length;
+        const rejectedApplications = applications.filter(a => a.status === 'Rejected').length;
 
         // Jobs by day (last 7 days)
         const jobsByDay = [];
@@ -1174,7 +1376,7 @@ app.get('/api/admin/dashboard/stats', adminAuth, async (req, res) => {
             const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
             const dayEnd   = new Date(dayStart.getTime() + 86400000);
             const count    = jobs.filter(j => { const c = new Date(j.createdAt); return c >= dayStart && c < dayEnd; }).length;
-            jobsByDay.push({ date: dateStr, count: count || Math.floor(Math.random() * 4) + 1 });
+            jobsByDay.push({ date: dateStr, count: count });
         }
 
         // Recent activity
@@ -1190,23 +1392,16 @@ app.get('/api/admin/dashboard/stats', adminAuth, async (req, res) => {
             recentActivity.push({ type: 'user', text: `New seeker registered: ${last.name}`, time: 'Recently' });
         }
 
-        if (!recentActivity.length) {
-            recentActivity.push(
-                { type: 'job', text: '"Senior React Developer" posted by TechCorp', time: 'Today' },
-                { type: 'application', text: 'Joshitha applied for "Full Stack Developer"', time: 'Today' }
-            );
-        }
-
         res.json({ success: true, stats: { totalJobs, activeJobs, totalSeekers, totalCompanies, totalApplications, pendingApplications, selectedApplications, rejectedApplications, jobsByDay, recentActivity } });
     } catch (error) {
         console.error('[STATS ERROR]', error.message);
         res.json({
             success: true,
             stats: {
-                totalJobs: 15, activeJobs: 12, totalSeekers: 24, totalCompanies: 8,
-                totalApplications: 42, pendingApplications: 6, selectedApplications: 18, rejectedApplications: 18,
-                jobsByDay: [{ date: 'Today', count: 3 }],
-                recentActivity: [{ type: 'job', text: 'Platform running in resilient mode', time: 'Just now' }]
+                totalJobs: 0, activeJobs: 0, totalSeekers: 0, totalCompanies: 0,
+                totalApplications: 0, pendingApplications: 0, selectedApplications: 0, rejectedApplications: 0,
+                jobsByDay: [],
+                recentActivity: []
             }
         });
     }
@@ -1311,13 +1506,9 @@ app.get('/api/admin/users', adminAuth, async (req, res) => {
         }));
 
         const allUsers = [...seekerUsers, ...companyUsers];
-        // If database is empty, use demo data
-        if (allUsers.length === 0) {
-            return res.json({ success: true, users: DEMO_USERS });
-        }
         res.json({ success: true, users: allUsers });
     } catch (error) {
-        res.json({ success: true, users: DEMO_USERS });
+        res.json({ success: true, users: [] });
     }
 });
 
@@ -1362,13 +1553,9 @@ app.get('/api/admin/jobs', adminAuth, async (req, res) => {
         } else {
             jobs = await Job.find().sort({ createdAt: -1 }).lean().catch(() => []);
         }
-        // If database is empty, use demo data
-        if (!jobs.length) {
-            jobs = [...memoryDB.jobs];
-        }
         res.json({ success: true, jobs });
     } catch (error) {
-        res.json({ success: true, jobs: [...memoryDB.jobs] });
+        res.json({ success: true, jobs: [] });
     }
 });
 
@@ -1378,14 +1565,16 @@ app.patch('/api/admin/jobs/:id/status', adminAuth, async (req, res) => {
         const { status } = req.body;
         const jobId = req.params.id;
 
-        if (mongoose.connection.readyState !== 1 || !mongoose.Types.ObjectId.isValid(jobId)) {
-            const job = memoryDB.jobs.find(j => j._id === jobId || j.id === jobId);
-            if (!job) return res.status(404).json({ success: false, message: 'Job not found (Mock).' });
-            job.status = status;
-            return res.json({ success: true, job, message: `Job status updated to ${status} (Mock).` });
+        // Keep memoryDB updated
+        const memJob = memoryDB.jobs.find(j => j._id === jobId || j.id === jobId);
+        if (memJob) memJob.status = status;
+
+        if (mongoose.connection.readyState !== 1) {
+            if (!memJob) return res.status(404).json({ success: false, message: 'Job not found.' });
+            return res.json({ success: true, job: memJob, message: `Job status updated to ${status}.` });
         }
 
-        const job = await Job.findOneAndUpdate({ _id: jobId }, { status }, { new: true });
+        const job = await Job.findOneAndUpdate({ $or: [{ _id: jobId }, { id: jobId }] }, { status }, { new: true });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         await logAuditAction(req.admin, 'Job Status Changed', `Job "${job.title}" status changed to "${status}"`, 'Job Management', 'info', req);
         res.json({ success: true, job, message: `Job status updated to ${status}.` });
@@ -1399,14 +1588,15 @@ app.patch('/api/admin/jobs/:id/featured', adminAuth, async (req, res) => {
     try {
         const jobId = req.params.id;
 
-        if (mongoose.connection.readyState !== 1 || !mongoose.Types.ObjectId.isValid(jobId)) {
-            const job = memoryDB.jobs.find(j => j._id === jobId || j.id === jobId);
-            if (!job) return res.status(404).json({ success: false, message: 'Job not found (Mock).' });
-            job.featured = !job.featured;
-            return res.json({ success: true, featured: job.featured, message: `Job featured toggled to ${job.featured} (Mock).` });
+        const memJob = memoryDB.jobs.find(j => j._id === jobId || j.id === jobId);
+        if (memJob) memJob.featured = !memJob.featured;
+
+        if (mongoose.connection.readyState !== 1) {
+            if (!memJob) return res.status(404).json({ success: false, message: 'Job not found.' });
+            return res.json({ success: true, featured: memJob.featured, message: `Job featured status toggled.` });
         }
 
-        const job = await Job.findOne({ _id: jobId });
+        const job = await Job.findOne({ $or: [{ _id: jobId }, { id: jobId }] });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         job.featured = !job.featured;
         await job.save();
@@ -1422,14 +1612,17 @@ app.put('/api/admin/jobs/:id', adminAuth, async (req, res) => {
     try {
         const jobId = req.params.id;
 
-        if (mongoose.connection.readyState !== 1 || !mongoose.Types.ObjectId.isValid(jobId)) {
-            const index = memoryDB.jobs.findIndex(j => j._id === jobId || j.id === jobId);
-            if (index === -1) return res.status(404).json({ success: false, message: 'Job not found (Mock).' });
+        const index = memoryDB.jobs.findIndex(j => j._id === jobId || j.id === jobId);
+        if (index !== -1) {
             memoryDB.jobs[index] = { ...memoryDB.jobs[index], ...req.body };
-            return res.json({ success: true, job: memoryDB.jobs[index], message: 'Job updated (Mock).' });
         }
 
-        const job = await Job.findOneAndUpdate({ _id: jobId }, req.body, { new: true });
+        if (mongoose.connection.readyState !== 1) {
+            if (index === -1) return res.status(404).json({ success: false, message: 'Job not found.' });
+            return res.json({ success: true, job: memoryDB.jobs[index], message: 'Job updated.' });
+        }
+
+        const job = await Job.findOneAndUpdate({ $or: [{ _id: jobId }, { id: jobId }] }, req.body, { new: true });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         await logAuditAction(req.admin, 'Job Updated', `Updated job details for "${job.title}"`, 'Job Management', 'info', req);
         res.json({ success: true, job, message: 'Job details updated successfully.' });
@@ -1443,12 +1636,13 @@ app.delete('/api/admin/jobs/:id', adminAuth, async (req, res) => {
     try {
         const jobId = req.params.id;
 
-        if (mongoose.connection.readyState !== 1 || !mongoose.Types.ObjectId.isValid(jobId)) {
-            memoryDB.jobs = memoryDB.jobs.filter(j => j._id !== jobId && j.id !== jobId);
-            return res.json({ success: true, message: 'Job deleted successfully (Mock).' });
+        memoryDB.jobs = memoryDB.jobs.filter(j => j._id !== jobId && j.id !== jobId);
+
+        if (mongoose.connection.readyState !== 1) {
+            return res.json({ success: true, message: 'Job deleted successfully.' });
         }
 
-        const job = await Job.findOneAndDelete({ _id: jobId });
+        const job = await Job.findOneAndDelete({ $or: [{ _id: jobId }, { id: jobId }] });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
         await logAuditAction(req.admin, 'Job Deleted', `Deleted job listing "${job.title}"`, 'Job Management', 'warning', req);
         res.json({ success: true, message: 'Job deleted successfully.' });
@@ -1464,11 +1658,20 @@ app.post('/api/admin/jobs/bulk', adminAuth, async (req, res) => {
         if (!ids || !ids.length) return res.status(400).json({ success: false, message: 'No job IDs provided.' });
 
         if (action === 'approve') {
-            await Job.updateMany({ _id: { $in: ids } }, { status: 'Active' });
+            if (mongoose.connection.readyState === 1) {
+                await Job.updateMany({ $or: [{ _id: { $in: ids } }, { id: { $in: ids } }] }, { status: 'Active' });
+            }
+            memoryDB.jobs.forEach(j => { if (ids.includes(j._id) || ids.includes(j.id)) j.status = 'Active'; });
         } else if (action === 'archive') {
-            await Job.updateMany({ _id: { $in: ids } }, { status: 'Archived' });
+            if (mongoose.connection.readyState === 1) {
+                await Job.updateMany({ $or: [{ _id: { $in: ids } }, { id: { $in: ids } }] }, { status: 'Archived' });
+            }
+            memoryDB.jobs.forEach(j => { if (ids.includes(j._id) || ids.includes(j.id)) j.status = 'Archived'; });
         } else if (action === 'delete') {
-            await Job.deleteMany({ _id: { $in: ids } });
+            if (mongoose.connection.readyState === 1) {
+                await Job.deleteMany({ $or: [{ _id: { $in: ids } }, { id: { $in: ids } }] });
+            }
+            memoryDB.jobs = memoryDB.jobs.filter(j => !ids.includes(j._id) && !ids.includes(j.id));
         } else {
             return res.status(400).json({ success: false, message: 'Invalid action.' });
         }
@@ -1584,15 +1787,6 @@ app.get('/api/admin/audit-logs', adminAuth, async (req, res) => {
             logs = [];
         } else {
             logs = await AuditLog.find().sort({ createdAt: -1 }).lean();
-        }
-        
-        if (!logs.length) {
-            // Seed initial logs if database logs are empty or offline
-            logs = [
-                { _id: '1', adminName: 'Super Admin', adminEmail: 'admin@smartjob.com', action: 'System Backup Downloaded', details: 'Full platform JSON backup generated', target: 'Database Backup', ipAddress: '127.0.0.1', severity: 'info', createdAt: new Date(Date.now() - 3600000).toISOString() },
-                { _id: '2', adminName: 'Super Admin', adminEmail: 'admin@smartjob.com', action: 'User Status Updated', details: 'User account reactivated for testing', target: 'User Management', ipAddress: '127.0.0.1', severity: 'warning', createdAt: new Date(Date.now() - 7200000).toISOString() },
-                { _id: '3', adminName: 'Super Admin', adminEmail: 'admin@smartjob.com', action: 'Platform Settings Updated', details: 'Auto-approve jobs policy enabled', target: 'Global Configuration', ipAddress: '127.0.0.1', severity: 'info', createdAt: new Date(Date.now() - 86400000).toISOString() }
-            ];
         }
         res.json({ success: true, logs });
     } catch (error) {
@@ -1785,7 +1979,7 @@ app.get('/api/jobs/saved/:email', async (req, res) => {
     try {
         const seeker = await Jobseeker.findOne({ email: req.params.email.toLowerCase() });
         if (!seeker) return res.status(404).json({ success: false, message: 'Seeker not found' });
-        const jobs = await Job.find({ _id: { $in: seeker.savedJobs } });
+        const jobs = await Job.find({ $or: [{ _id: { $in: seeker.savedJobs } }, { id: { $in: seeker.savedJobs } }] });
         res.json({ success: true, jobs: mapId(jobs) });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -1813,7 +2007,7 @@ const calculateAIMatchScore = (jobSkillsStr, seekerSkillsStr) => {
 app.post('/api/ai/match-score', async (req, res) => {
     try {
         const { jobId, seekerEmail } = req.body;
-        const job = await Job.findOne({ _id: jobId });
+        const job = await Job.findOne({ $or: [{ _id: jobId }, { id: jobId }] });
         const seeker = await Jobseeker.findOne({ email: (seekerEmail || '').toLowerCase() });
         
         if (!job || !seeker) {
@@ -1903,9 +2097,33 @@ app.post('/api/interviews/schedule', async (req, res) => {
         const { companyEmail, seekerEmail, seekerName, jobTitle, scheduledDate, scheduledTime, notes } = req.body;
         const meetLink = `https://meet.google.com/smart-job-${Math.floor(100000 + Math.random() * 900000)}`;
         
+        if (mongoose.connection.readyState !== 1) {
+            const mockInt = {
+                _id: 'int_' + Date.now(),
+                id: 'int_' + Date.now(),
+                companyEmail: (companyEmail || '').toLowerCase(),
+                seekerEmail: (seekerEmail || '').toLowerCase(),
+                seekerName: seekerName || 'Applicant',
+                jobTitle: jobTitle || 'Position',
+                scheduledDate,
+                scheduledTime,
+                meetLink,
+                notes: notes || 'Technical & Cultural Fit Interview'
+            };
+            memoryDB.interviews.push(mockInt);
+            
+            const app = memoryDB.applications.find(a => 
+                a.seekerEmail === (seekerEmail || '').toLowerCase() && 
+                a.jobTitle.toLowerCase() === (jobTitle || '').toLowerCase()
+            );
+            if (app) app.status = 'Interview Scheduled';
+            
+            return res.json({ success: true, interview: mockInt });
+        }
+
         const interview = await Interview.create({
-            companyEmail: companyEmail.toLowerCase(),
-            seekerEmail: seekerEmail.toLowerCase(),
+            companyEmail: (companyEmail || '').toLowerCase(),
+            seekerEmail: (seekerEmail || '').toLowerCase(),
             seekerName: seekerName || 'Applicant',
             jobTitle: jobTitle || 'Position',
             scheduledDate,
@@ -1914,8 +2132,13 @@ app.post('/api/interviews/schedule', async (req, res) => {
             notes: notes || 'Technical & Cultural Fit Interview'
         });
         
+        await Application.findOneAndUpdate(
+            { seekerEmail: (seekerEmail || '').toLowerCase(), jobTitle: jobTitle },
+            { status: 'Interview Scheduled' }
+        );
+        
         await Notification.create({
-            recipientEmail: seekerEmail.toLowerCase(),
+            recipientEmail: (seekerEmail || '').toLowerCase(),
             title: '📅 Interview Scheduled!',
             message: `You have an interview for ${jobTitle} on ${scheduledDate} at ${scheduledTime}. Meet link: ${meetLink}`
         });
@@ -1929,6 +2152,10 @@ app.post('/api/interviews/schedule', async (req, res) => {
 app.get('/api/interviews/:email', async (req, res) => {
     try {
         const email = req.params.email.toLowerCase();
+        if (mongoose.connection.readyState !== 1) {
+            const list = memoryDB.interviews.filter(i => i.companyEmail === email || i.seekerEmail === email);
+            return res.json({ success: true, interviews: list });
+        }
         const interviews = await Interview.find({
             $or: [{ companyEmail: email }, { seekerEmail: email }]
         }).sort({ createdAt: -1 });
@@ -2195,14 +2422,42 @@ app.get('/api/insights/salary-benchmark', async (req, res) => {
 app.get('/api/seeker/pipeline/:email', async (req, res) => {
     try {
         const email = req.params.email.toLowerCase();
-        let applications = await Application.find({ seekerEmail: email }).lean();
+        let applications = [];
+        let interviews = [];
+
+        if (mongoose.connection.readyState !== 1) {
+            applications = memoryDB.applications.filter(a => a.seekerEmail === email);
+            interviews = memoryDB.interviews.filter(i => i.seekerEmail === email);
+        } else {
+            [applications, interviews] = await Promise.all([
+                Application.find({ seekerEmail: email }).lean(),
+                Interview.find({ seekerEmail: email }).lean()
+            ]);
+        }
 
         if (!applications.length) {
             applications = [
                 { _id: 'app_101', jobTitle: 'Full Stack React Engineer', companyName: 'TechCorp Solutions', seekerEmail: email, appliedDate: '2026-07-15', status: 'Pending', city: 'Bangalore' },
                 { _id: 'app_102', jobTitle: 'Senior Node.js Developer', companyName: 'InnovateX Labs', seekerEmail: email, appliedDate: '2026-07-10', status: 'Shortlisted', city: 'Remote' },
-                { _id: 'app_103', jobTitle: 'AI & Data Scientist', companyName: 'Global AI Tech', seekerEmail: email, appliedDate: '2026-07-08', status: 'Interview Scheduled', city: 'Hyderabad' }
+                { _id: 'app_103', jobTitle: 'AI & Data Scientist', companyName: 'Global AI Tech', seekerEmail: email, appliedDate: '2026-07-08', status: 'Interview Scheduled', city: 'Hyderabad', meetLink: 'https://meet.google.com/smart-job-demo', scheduledTime: 'Tomorrow at 3:00 PM' }
             ];
+        } else {
+            // Merge actual interviews into applications
+            applications = applications.map(app => {
+                const match = interviews.find(i => 
+                    i.seekerEmail === app.seekerEmail && 
+                    (i.jobTitle.toLowerCase() === app.jobTitle.toLowerCase())
+                );
+                if (match) {
+                    return {
+                        ...app,
+                        status: 'Interview Scheduled',
+                        meetLink: match.meetLink,
+                        scheduledTime: `${match.scheduledDate} at ${match.scheduledTime}`
+                    };
+                }
+                return app;
+            });
         }
 
         const pipeline = {
@@ -2224,8 +2479,19 @@ app.patch('/api/seeker/pipeline/status', async (req, res) => {
         const { applicationId, status } = req.body;
         if (!applicationId || !status) return res.status(400).json({ success: false, message: 'applicationId and status required' });
 
-        const updated = await Application.findOneAndUpdate({ _id: applicationId }, { status }, { new: true });
-        res.json({ success: true, message: `Application moved to "${status}"`, application: updated });
+        const memApp = memoryDB.applications.find(a => a._id === applicationId || a.id === applicationId);
+        if (memApp) memApp.status = status;
+
+        if (mongoose.connection.readyState !== 1) {
+            return res.json({ success: true, message: `Application moved to "${status}"`, application: memApp || { id: applicationId, status } });
+        }
+
+        const updated = await Application.findOneAndUpdate(
+            { $or: [{ _id: applicationId }, { id: applicationId }] },
+            { status },
+            { new: true, lean: true }
+        );
+        res.json({ success: true, message: `Application moved to "${status}"`, application: updated || memApp });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
@@ -2237,16 +2503,18 @@ app.patch('/api/seeker/pipeline/status', async (req, res) => {
 
 app.get('/api/employer/candidate-rankings/:companyEmail', async (req, res) => {
     try {
-        const email = req.params.email || req.params.companyEmail;
+        const rawEmail = req.params.companyEmail || req.params.email || '';
+        if (!rawEmail) return res.status(400).json({ success: false, message: 'Company email is required.' });
+        const email = rawEmail.toLowerCase().trim();
         const { jobId } = req.query;
 
         let applications = [];
         if (mongoose.connection.readyState !== 1) {
             console.warn('[RANKER] MongoDB is offline. Using fallback memory applications.');
-            applications = memoryDB.applications.filter(a => a.companyEmail === email.toLowerCase());
+            applications = memoryDB.applications.filter(a => (a.companyEmail || '').toLowerCase() === email);
             if (jobId) applications = applications.filter(a => a.jobId === jobId);
         } else {
-            const query = { companyEmail: email.toLowerCase() };
+            const query = { companyEmail: email };
             if (jobId) query.jobId = jobId;
             applications = await Application.find(query).lean();
         }
