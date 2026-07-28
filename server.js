@@ -14,6 +14,9 @@ const { Jobseeker, Company, Job, Application, Admin, Notification, Message, Inte
 const mongoose = require('mongoose');
 const { registerInFirebase, loginWithFirebase } = require('./db/firebase');
 
+// Immediately pre-warm MongoDB connection in background
+connectDB().catch(() => null);
+
 // In-memory fallback database when MongoDB connection is offline
 const memoryDB = {
     seekers: {},

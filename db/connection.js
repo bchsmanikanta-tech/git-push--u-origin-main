@@ -8,8 +8,8 @@ const connectDB = async () => {
     const mongoURI = process.env.MONGO_URI || 'mongodb+srv://bhaihack333_db_user:kRTnlwlPdikPS4m8@smartjob.alq6c0s.mongodb.net/smartjobfinder?retryWrites=true&w=majority&appName=smartjob';
     try {
         const conn = await mongoose.connect(mongoURI, {
-            serverSelectionTimeoutMS: 10000,
-            connectTimeoutMS: 10000,
+            serverSelectionTimeoutMS: 3000,
+            connectTimeoutMS: 3000,
             autoIndex: true
         });
         console.log(`[DB] MongoDB Connected: ${conn.connection.host}`);

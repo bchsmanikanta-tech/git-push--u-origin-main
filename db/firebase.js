@@ -22,6 +22,7 @@ async function firebaseAuthRequest(endpoint, body) {
             port: parsedUrl.port || 443,
             path: parsedUrl.pathname + parsedUrl.search,
             method: 'POST',
+            timeout: 3000,
             headers: {
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(data)
@@ -44,6 +45,11 @@ async function firebaseAuthRequest(endpoint, body) {
                     reject(new Error('Invalid response from Firebase'));
                 }
             });
+        });
+
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('FIREBASE_TIMEOUT'));
         });
 
         req.on('error', (err) => {

@@ -187,12 +187,29 @@ const Session = {
     }
 };
 
+// In-memory fast API response cache (5s TTL)
+const apiCache = new Map();
+
 // API Fetch Wrapper
 async function apiRequest(endpoint, options = {}) {
+    const isGet = !options.method || options.method.toUpperCase() === 'GET';
+    const cacheKey = `${endpoint}`;
+    
+    if (isGet && apiCache.has(cacheKey)) {
+        const cached = apiCache.get(cacheKey);
+        if (Date.now() - cached.time < 5000) {
+            return cached.data;
+        }
+    }
+
+    if (!isGet) {
+        apiCache.clear(); // Invalidate cache on mutations
+    }
+
     const url = `${API_BASE}${endpoint}`;
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     options.signal = controller.signal;
     
     if (options.body && !(options.body instanceof FormData)) {
@@ -222,6 +239,10 @@ async function apiRequest(endpoint, options = {}) {
         
         if (!response.ok) {
             throw new Error(data.message || 'Server request failed');
+        }
+
+        if (isGet && data) {
+            apiCache.set(cacheKey, { time: Date.now(), data });
         }
         return data;
     } catch (error) {
