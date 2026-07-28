@@ -5,7 +5,7 @@ const connectDB = async () => {
         return mongoose.connection;
     }
 
-    const mongoURI = process.env.MONGO_URI || 'mongodb+srv://bhaihack333_db_user:kRTnlwlPdikPS4m8@smartjob.alq6c0s.mongodb.net/smartjobfinder?retryWrites=true&w=majority&appName=smartjob';
+    const mongoURI = process.env.MONGO_URI || 'mongodb+srv://mani-64:w7vleVtcYtFqvIIk@cluster0.gxfiwno.mongodb.net/smartjobfinder?retryWrites=true&w=majority&appName=Cluster0';
     try {
         const conn = await mongoose.connect(mongoURI, {
             serverSelectionTimeoutMS: 3000,

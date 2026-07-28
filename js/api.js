@@ -56,14 +56,10 @@ try {
     } catch (e) {}
 })();
 
-// API BASE URL CONFIGURATION
-const isLocal = window.location.hostname === 'localhost' || 
-                window.location.hostname === '127.0.0.1' || 
-                window.location.protocol === 'file:';
-
-const API_BASE = isLocal
+// API BASE URL CONFIGURATION (Unified across Laptop, Mobile & Cloud)
+const API_BASE = window.location.protocol === 'file:'
     ? 'http://localhost:5000/api'
-    : '/api';
+    : `${window.location.origin}/api`;
 
 if (window.location.protocol === 'file:') {
     document.addEventListener('DOMContentLoaded', () => {
