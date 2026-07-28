@@ -127,37 +127,39 @@ app.post('/api/auth/register-seeker', async (req, res) => {
     if (!name || !email || !password)
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     const cleanEmail = email.toLowerCase().trim();
+
+    if (mongoose.connection.readyState !== 1) {
+        await connectDB().catch(() => null);
+    }
+
     try {
-        // Attempt registration in Firebase Auth first
         try {
             await registerInFirebase(cleanEmail, password);
         } catch (fbErr) {
             if (fbErr.message.includes('EMAIL_EXISTS')) {
-                return res.status(400).json({ success: false, message: 'Email already registered in Firebase.' });
+                return res.status(400).json({ success: false, message: 'Email already registered.' });
             } else {
-                console.warn('[FIREBASE REGISTER WARNING] Firebase registration failed, falling back to local DB:', fbErr.message);
+                console.warn('[FIREBASE REGISTER WARNING] Registration skipped/failed:', fbErr.message);
             }
         }
 
-        // Register locally in MongoDB / memoryDB
-        if (mongoose.connection.readyState !== 1) {
-            if (memoryDB.seekers[cleanEmail]) {
-                return res.status(400).json({ success: false, message: 'Email already registered.' });
-            }
-            memoryDB.seekers[cleanEmail] = { name, email: cleanEmail, password, status: 'active', savedJobs: [], skills: '', qualification: '' };
-            return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
+        // Always save to memoryDB fallback
+        memoryDB.seekers[cleanEmail] = { name, email: cleanEmail, password, status: 'active', savedJobs: [], skills: '', qualification: '' };
+
+        // Save to MongoDB if connected
+        if (mongoose.connection.readyState === 1) {
+            const existing = await Jobseeker.findOne({ email: cleanEmail });
+            if (existing) return res.status(400).json({ success: false, message: 'Email already registered.' });
+            await Jobseeker.create({ name, email: cleanEmail, password });
         }
-        const existing = await Jobseeker.findOne({ email: cleanEmail });
-        if (existing) return res.status(400).json({ success: false, message: 'Email already registered.' });
-        await Jobseeker.create({ name, email: cleanEmail, password });
-        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
+        
+        return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
     } catch (error) {
         if (error.code === 11000) {
             return res.status(400).json({ success: false, message: 'Email already registered.' });
         }
         console.error('[REGISTER SEEKER ERROR]', error.message);
-        memoryDB.seekers[cleanEmail] = { name, email: cleanEmail, password, status: 'active', savedJobs: [] };
-        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
+        return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
     }
 });
 
@@ -167,86 +169,42 @@ app.post('/api/auth/login-seeker', async (req, res) => {
     if (!email || !password) {
         return res.status(400).json({ success: false, message: 'Email and password are required.' });
     }
-    const cleanEmail = (email || 'user@smartjob.com').toLowerCase().trim();
+    const cleanEmail = email.toLowerCase().trim();
     const rawName = cleanEmail.split('@')[0].replace(/[^a-zA-Z]/g, ' ') || 'Jobseeker';
     const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
 
+    if (mongoose.connection.readyState !== 1) {
+        await connectDB().catch(() => null);
+    }
+
     try {
-        // Attempt verification in Firebase Auth first
-        let firebaseAuthFailed = false;
-        try {
-            await loginWithFirebase(cleanEmail, password);
-        } catch (fbErr) {
-            if (fbErr.message === 'FIREBASE_API_KEY_MISSING') {
-                console.warn('[FIREBASE] API key missing, falling back to local DB credentials check.');
-                firebaseAuthFailed = null; // skipped
-            } else {
-                console.warn('[FIREBASE LOGIN WARNING - fallback checking]', fbErr.message);
-                firebaseAuthFailed = true; // invalid credentials
-            }
+        const memSeeker = memoryDB.seekers[cleanEmail];
+        let seeker = null;
+        if (mongoose.connection.readyState === 1) {
+            seeker = await Jobseeker.findOne({ email: cleanEmail });
         }
 
-        // Check local DB fallback to auto-register / verify
-        if (firebaseAuthFailed === true) {
-            if (mongoose.connection.readyState !== 1) {
-                const seeker = memoryDB.seekers[cleanEmail];
-                if (seeker && seeker.password === password) {
-                    firebaseAuthFailed = false; // local verify succeeded!
-                }
-            } else {
-                let seeker = await Jobseeker.findOne({ email: cleanEmail });
-                if (seeker && seeker.password === password) {
-                    // Try to sync to Firebase in background, do not block login if it fails
-                    registerInFirebase(cleanEmail, password).catch(syncErr => {
-                        console.error('[FIREBASE SYNC ERROR]', syncErr.message);
-                    });
-                    firebaseAuthFailed = false; // local verify succeeded!
-                }
-            }
-        }
-
-        if (firebaseAuthFailed === true) {
-            return res.status(401).json({ success: false, message: 'Invalid email or password.' });
-        }
-
-        // Fetch profile from local database
-        if (mongoose.connection.readyState !== 1) {
-            const seeker = memoryDB.seekers[cleanEmail];
-            if (!seeker) {
-                if (firebaseAuthFailed === false) {
-                    // Firebase login succeeded but profile is missing in DB: sync and create
-                    memoryDB.seekers[cleanEmail] = { name: capName, email: cleanEmail, password, status: 'active', savedJobs: [] };
-                    return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'seeker' } });
-                }
-                return res.status(401).json({ success: false, message: 'User not registered.' });
-            }
-            if (firebaseAuthFailed === null && seeker.password !== password) {
+        if (seeker) {
+            if (seeker.password !== password) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
+            memoryDB.seekers[cleanEmail] = { name: seeker.name || capName, email: cleanEmail, password, status: 'active', savedJobs: [] };
             return res.status(200).json({ success: true, message: 'Login successful!', user: { name: seeker.name || capName, email: cleanEmail, role: 'seeker' } });
         }
 
-        let seeker = await Jobseeker.findOne({ email: cleanEmail });
-        if (!seeker) {
-            if (firebaseAuthFailed === false) {
-                // Firebase login succeeded but profile is missing in Mongo: sync and create
-                seeker = await Jobseeker.create({ name: capName, email: cleanEmail, password, status: 'active' });
-            } else {
-                return res.status(401).json({ success: false, message: 'User not registered. Please sign up first.' });
-            }
-        } else {
-            // User exists. If Firebase was skipped, check local password.
-            if (firebaseAuthFailed === null && seeker.password !== password) {
+        if (memSeeker) {
+            if (memSeeker.password !== password) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
-            // Keep local password in sync with Firebase password if it differs
-            if (seeker.password !== password) {
-                seeker.password = password;
-                await seeker.save();
+            if (mongoose.connection.readyState === 1) {
+                try {
+                    await Jobseeker.create({ name: memSeeker.name || capName, email: cleanEmail, password, status: 'active' });
+                } catch (e) {}
             }
+            return res.status(200).json({ success: true, message: 'Login successful!', user: { name: memSeeker.name || capName, email: cleanEmail, role: 'seeker' } });
         }
 
-        return res.status(200).json({ success: true, message: 'Login successful!', user: { name: seeker.name || capName, email: cleanEmail, role: 'seeker' } });
+        return res.status(401).json({ success: false, message: 'User not registered. Please sign up first.' });
     } catch (error) {
         console.error('[LOGIN SEEKER ERROR]', error.message);
         return res.status(500).json({ success: false, message: 'Internal server error during login.' });
@@ -263,37 +221,37 @@ app.post('/api/auth/register-company', async (req, res) => {
     if (!name || !email || !password)
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     const cleanEmail = email.toLowerCase().trim();
+
+    if (mongoose.connection.readyState !== 1) {
+        await connectDB().catch(() => null);
+    }
+
     try {
-        // Attempt registration in Firebase Auth first
         try {
             await registerInFirebase(cleanEmail, password);
         } catch (fbErr) {
             if (fbErr.message.includes('EMAIL_EXISTS')) {
-                return res.status(400).json({ success: false, message: 'Company email already registered in Firebase.' });
+                return res.status(400).json({ success: false, message: 'Company email already registered.' });
             } else {
-                console.warn('[FIREBASE REGISTER WARNING] Firebase registration failed, falling back to local DB:', fbErr.message);
+                console.warn('[FIREBASE REGISTER WARNING] Registration skipped/failed:', fbErr.message);
             }
         }
 
-        // Register locally in MongoDB / memoryDB
-        if (mongoose.connection.readyState !== 1) {
-            if (memoryDB.companies[cleanEmail]) {
-                return res.status(400).json({ success: false, message: 'Company email already registered.' });
-            }
-            memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password, status: 'active', industry: '', location: '' };
-            return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
+        memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password, status: 'active', industry: '', location: '' };
+
+        if (mongoose.connection.readyState === 1) {
+            const existing = await Company.findOne({ email: cleanEmail });
+            if (existing) return res.status(400).json({ success: false, message: 'Company email already registered.' });
+            await Company.create({ name, email: cleanEmail, password });
         }
-        const existing = await Company.findOne({ email: cleanEmail });
-        if (existing) return res.status(400).json({ success: false, message: 'Company email already registered.' });
-        await Company.create({ name, email: cleanEmail, password });
-        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
+
+        return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
     } catch (error) {
         if (error.code === 11000) {
             return res.status(400).json({ success: false, message: 'Company email already registered.' });
         }
         console.error('[REGISTER COMPANY ERROR]', error.message);
-        memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password, status: 'active' };
-        res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
+        return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
     }
 });
 
@@ -303,91 +261,48 @@ app.post('/api/auth/login-company', async (req, res) => {
     if (!email || !password) {
         return res.status(400).json({ success: false, message: 'Email and password are required.' });
     }
-    const cleanEmail = (email || 'hr@techcorp.com').toLowerCase().trim();
+    const cleanEmail = email.toLowerCase().trim();
     const rawName = (cleanEmail.split('@')[0] + ' Tech').replace(/[^a-zA-Z ]/g, '');
     const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
 
+    if (mongoose.connection.readyState !== 1) {
+        await connectDB().catch(() => null);
+    }
+
     try {
-        // Attempt verification in Firebase Auth first
-        let firebaseAuthFailed = false;
-        try {
-            await loginWithFirebase(cleanEmail, password);
-        } catch (fbErr) {
-            if (fbErr.message === 'FIREBASE_API_KEY_MISSING') {
-                console.warn('[FIREBASE] API key missing, falling back to local DB credentials check.');
-                firebaseAuthFailed = null; // skipped
-            } else {
-                console.warn('[FIREBASE LOGIN WARNING - fallback checking]', fbErr.message);
-                firebaseAuthFailed = true; // invalid credentials
-            }
+        const memCompany = memoryDB.companies[cleanEmail];
+        let company = null;
+        if (mongoose.connection.readyState === 1) {
+            company = await Company.findOne({ email: cleanEmail });
         }
 
-        // Check local DB fallback to auto-register / verify
-        if (firebaseAuthFailed === true) {
-            if (mongoose.connection.readyState !== 1) {
-                const company = memoryDB.companies[cleanEmail];
-                if (company && company.password === password) {
-                    firebaseAuthFailed = false; // local verify succeeded!
-                }
-            } else {
-                let company = await Company.findOne({ email: cleanEmail });
-                if (company && company.password === password) {
-                    // Try to sync to Firebase in background, do not block login if it fails
-                    registerInFirebase(cleanEmail, password).catch(syncErr => {
-                        console.error('[FIREBASE SYNC ERROR]', syncErr.message);
-                    });
-                    firebaseAuthFailed = false; // local verify succeeded!
-                }
-            }
-        }
-
-        if (firebaseAuthFailed === true) {
-            return res.status(401).json({ success: false, message: 'Invalid email or password.' });
-        }
-
-        // Fetch profile from local database
-        if (mongoose.connection.readyState !== 1) {
-            const company = memoryDB.companies[cleanEmail];
-            if (!company) {
-                if (firebaseAuthFailed === false) {
-                    // Firebase login succeeded but profile is missing in DB: sync and create
-                    memoryDB.companies[cleanEmail] = { name: capName, email: cleanEmail, password, status: 'active' };
-                    return res.status(200).json({ success: true, message: 'Login successful!', user: { name: capName, email: cleanEmail, role: 'company' } });
-                }
-                return res.status(401).json({ success: false, message: 'Company not registered.' });
-            }
-            if (firebaseAuthFailed === null && company.password !== password) {
+        if (company) {
+            if (company.password !== password) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
+            memoryDB.companies[cleanEmail] = { name: company.name || capName, email: cleanEmail, password, status: 'active' };
             return res.status(200).json({ success: true, message: 'Login successful!', user: { name: company.name || capName, email: cleanEmail, role: 'company' } });
         }
 
-        let company = await Company.findOne({ email: cleanEmail });
-        if (!company) {
-            if (firebaseAuthFailed === false) {
-                // Firebase login succeeded but profile is missing in Mongo: sync and create
-                company = await Company.create({ name: capName, email: cleanEmail, password, status: 'active' });
-            } else {
-                return res.status(401).json({ success: false, message: 'Company not registered. Please sign up first.' });
-            }
-        } else {
-            // Company exists. If Firebase was skipped, check local password.
-            if (firebaseAuthFailed === null && company.password !== password) {
+        if (memCompany) {
+            if (memCompany.password !== password) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
-            // Keep local password in sync with Firebase password if it differs
-            if (company.password !== password) {
-                company.password = password;
-                await company.save();
+            if (mongoose.connection.readyState === 1) {
+                try {
+                    await Company.create({ name: memCompany.name || capName, email: cleanEmail, password, status: 'active' });
+                } catch (e) {}
             }
+            return res.status(200).json({ success: true, message: 'Login successful!', user: { name: memCompany.name || capName, email: cleanEmail, role: 'company' } });
         }
 
-        return res.status(200).json({ success: true, message: 'Login successful!', user: { name: company.name || capName, email: cleanEmail, role: 'company' } });
+        return res.status(401).json({ success: false, message: 'Company not registered. Please sign up first.' });
     } catch (error) {
         console.error('[LOGIN COMPANY ERROR]', error.message);
         return res.status(500).json({ success: false, message: 'Internal server error during login.' });
     }
 });
+
 
 /* ================================================================
    PROFILES
@@ -2907,11 +2822,19 @@ const ensureDefaultAdmin = async () => {
 const startServer = async () => {
     await connectDB();
     await ensureDefaultAdmin();
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         console.log('==================================================');
         console.log(` SERVER RUNNING  → http://localhost:${PORT}`);
         console.log(` DATABASE        → MongoDB Atlas Cloud`);
         console.log('==================================================');
+    });
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`\n[PORT ERROR] Port ${PORT} is already in use by another active server process!`);
+            console.log(`To fix: Stop the existing node server or run: npx kill-port ${PORT}\n`);
+        } else {
+            console.error('\n[SERVER ERROR]', err.message);
+        }
     });
 };
 
