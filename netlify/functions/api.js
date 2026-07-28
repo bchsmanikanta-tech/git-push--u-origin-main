@@ -21,10 +21,6 @@ const handler = async (event, context) => {
       if (!exists) {
         await Admin.create({ name: 'Super Admin', email: 'admin@smartjob.com', password: 'Admin@123', role: 'Super Admin', status: 'Active' });
         console.log('[ADMIN] Default admin created → admin@smartjob.com / Admin@123');
-      } else if (exists.password !== 'Admin@123') {
-        exists.password = 'Admin@123';
-        await exists.save();
-        console.log('[ADMIN] Default admin password reset → Admin@123');
       }
       seedChecked = true;
     } catch (err) {

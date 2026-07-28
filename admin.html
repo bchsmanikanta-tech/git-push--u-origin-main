@@ -824,16 +824,29 @@ async function handleLogin(e) {
 
     try {
         let data = null;
+        let apiError = null;
         try {
             const res = await fetch(`${BASE}/api/admin/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
-            if (res.ok) {
-                data = await res.json();
+            const result = await res.json();
+            if (res.ok && result.success) {
+                data = result;
+            } else {
+                apiError = result.message || 'Invalid admin credentials.';
             }
-        } catch (e) {}
+        } catch (netErr) {
+            console.warn('[ADMIN LOGIN] Network issue, utilizing offline console mode:', netErr);
+        }
+
+        if (apiError) {
+            errorDiv.textContent = apiError;
+            errorDiv.style.display = 'block';
+            showToast(apiError, 'error');
+            return;
+        }
 
         if (!data) {
             const adminName = (email.split('@')[0] || 'admin').toUpperCase();
