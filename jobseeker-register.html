@@ -64,23 +64,9 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
+        document.addEventListener('DOMContentLoaded', () => {
             const form = document.getElementById('registerForm');
             const submitBtn = form.querySelector('button[type="submit"]');
-
-            // Pre-check: ping server to show warning early
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-                const resp = await fetch(
-                    (window.location.protocol === 'file:' ? 'http://localhost:5000' : '') + '/api/status',
-                    { signal: controller.signal }
-                );
-                clearTimeout(timeoutId);
-                if (!resp.ok) throw new Error('Server error');
-            } catch (err) {
-                showToast('⚠️ Cannot reach the server. Make sure you ran: npm start', 'error');
-            }
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();

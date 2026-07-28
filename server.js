@@ -51,6 +51,11 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ limit: '15mb', extended: true }));
 
+// Health Check Endpoint
+app.get('/api/status', (req, res) => {
+    res.json({ success: true, status: 'online', timestamp: new Date().toISOString() });
+});
+
 // ─── Map Mongoose _id to id in JSON Responses ────────────────────────────────
 const mapId = (obj) => {
     if (!obj) return obj;
