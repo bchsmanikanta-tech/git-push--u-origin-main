@@ -362,9 +362,9 @@
                     const appData = {
                         jobId: jobDetails.id || jobDetails._id,
                         jobTitle: jobDetails.title,
-                        companyEmail: jobDetails.companyEmail,
+                        companyEmail: (jobDetails.companyEmail || '').toLowerCase().trim(),
                         companyName: jobDetails.companyName,
-                        seekerEmail: user.email,
+                        seekerEmail: (user.email || '').toLowerCase().trim(),
                         seekerName: fullName,
                         coverLetter: coverLetter,
                         resume: finalResumeFilename,

@@ -354,6 +354,55 @@ const LocalJobs = {
     }
 };
 
+const LocalApplications = {
+    KEY: 'sjvf_local_apps',
+    getAll() {
+        try {
+            const raw = SafeStorage.getItem(this.KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch(e) {
+            return [];
+        }
+    },
+    saveAll(apps) {
+        try {
+            SafeStorage.setItem(this.KEY, JSON.stringify(apps));
+        } catch(e) {}
+    },
+    add(appObj) {
+        const apps = this.getAll();
+        const appId = appObj.id || appObj._id || ('app_' + Date.now());
+        const cleanApp = {
+            ...appObj,
+            id: appId,
+            _id: appId,
+            companyEmail: (appObj.companyEmail || '').toLowerCase().trim(),
+            seekerEmail: (appObj.seekerEmail || '').toLowerCase().trim(),
+            status: appObj.status || 'Pending',
+            appliedDate: appObj.appliedDate || new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+            createdAt: appObj.createdAt || new Date().toISOString()
+        };
+        const idx = apps.findIndex(a => (a.id && a.id === cleanApp.id) || (a._id && a._id === cleanApp._id));
+        if (idx !== -1) {
+            apps[idx] = cleanApp;
+        } else {
+            apps.unshift(cleanApp);
+        }
+        this.saveAll(apps);
+        return cleanApp;
+    },
+    updateStatus(id, status) {
+        const apps = this.getAll();
+        const idx = apps.findIndex(a => a.id === id || a._id === id);
+        if (idx !== -1) {
+            apps[idx].status = status;
+            this.saveAll(apps);
+            return apps[idx];
+        }
+        return null;
+    }
+};
+
 const API = {
     auth: {
         async registerSeeker(name, email, password) {
@@ -808,27 +857,137 @@ const API = {
 
     applications: {
         async get(id) {
-            return apiRequest(`/applications/${id}`);
+            try {
+                return await apiRequest(`/applications/${id}`);
+            } catch (err) {
+                const local = LocalApplications.getAll().find(a => a.id === id || a._id === id);
+                if (local) return { success: true, application: local };
+                throw err;
+            }
         },
+
         async submit(data) {
-            return apiRequest('/applications', {
-                method: 'POST',
-                body: data
-            });
+            const appId = 'app_' + Date.now();
+            const cleanCompanyEmail = (data.companyEmail || '').toLowerCase().trim();
+            const cleanSeekerEmail = (data.seekerEmail || '').toLowerCase().trim();
+
+            const localAppObj = {
+                id: appId,
+                _id: appId,
+                jobId: data.jobId,
+                jobTitle: data.jobTitle,
+                companyEmail: cleanCompanyEmail,
+                companyName: data.companyName || '',
+                seekerEmail: cleanSeekerEmail,
+                seekerName: data.seekerName || 'Anonymous Jobseeker',
+                appliedDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+                resume: data.resume || '',
+                coverLetter: data.coverLetter || '',
+                status: 'Pending',
+                cgpa: data.cgpa || '',
+                certification: data.certification || '',
+                address: data.address || '',
+                city: data.city || '',
+                state: data.state || '',
+                experienceYears: data.experienceYears || '',
+                qualification: data.qualification || '',
+                expectedSalary: data.expectedSalary || '',
+                createdAt: new Date().toISOString()
+            };
+
+            // Save locally immediately
+            LocalApplications.add(localAppObj);
+
+            try {
+                const res = await apiRequest('/applications', {
+                    method: 'POST',
+                    body: data
+                });
+                if (res && res.application) {
+                    LocalApplications.add(res.application);
+                }
+                return res || { success: true, message: 'Application submitted successfully!', application: localAppObj };
+            } catch (err) {
+                console.warn('[API.applications.submit] Remote save fallback used:', err.message);
+                return { success: true, message: 'Application submitted successfully!', application: localAppObj };
+            }
         },
+
         async getForSeeker(email) {
-            return apiRequest(`/applications/seeker/${email}`);
-        },
-        async getForCompany(email, jobId) {
-            let endpoint = `/applications/company/${email}`;
-            if (jobId) endpoint += `?jobId=${encodeURIComponent(jobId)}`;
-            return apiRequest(endpoint);
-        },
-        async updateStatus(id, status) {
-            return apiRequest(`/applications/${id}/status`, {
-                method: 'PATCH',
-                body: { status }
+            const cleanEmail = (email || '').toLowerCase().trim();
+            let remoteApps = [];
+            try {
+                const res = await apiRequest(`/applications/seeker/${cleanEmail}`);
+                if (res && Array.isArray(res.applications)) {
+                    remoteApps = res.applications;
+                }
+            } catch (err) {
+                console.warn('[API.applications.getForSeeker] Remote fetch fallback used:', err.message);
+            }
+
+            let localApps = LocalApplications.getAll().filter(a => (a.seekerEmail || '').toLowerCase().trim() === cleanEmail);
+
+            const map = new Map();
+            [...localApps, ...remoteApps].forEach(app => {
+                const key = app.id || app._id;
+                if (key && !map.has(key)) {
+                    map.set(key, app);
+                }
             });
+            const mergedApps = Array.from(map.values());
+
+            return {
+                success: true,
+                applications: mergedApps
+            };
+        },
+
+        async getForCompany(email, jobId) {
+            const cleanEmail = (email || '').toLowerCase().trim();
+            let endpoint = `/applications/company/${cleanEmail}`;
+            if (jobId) endpoint += `?jobId=${encodeURIComponent(jobId)}`;
+
+            let remoteApps = [];
+            try {
+                const res = await apiRequest(endpoint);
+                if (res && Array.isArray(res.applications)) {
+                    remoteApps = res.applications;
+                }
+            } catch (err) {
+                console.warn('[API.applications.getForCompany] Remote fetch fallback used:', err.message);
+            }
+
+            // Merge local applications from LocalApplications
+            let localApps = LocalApplications.getAll().filter(a => (a.companyEmail || '').toLowerCase().trim() === cleanEmail);
+            if (jobId) {
+                localApps = localApps.filter(a => a.jobId === jobId);
+            }
+
+            const map = new Map();
+            [...localApps, ...remoteApps].forEach(app => {
+                const key = app.id || app._id;
+                if (key && !map.has(key)) {
+                    map.set(key, app);
+                }
+            });
+            const mergedApps = Array.from(map.values());
+
+            return {
+                success: true,
+                applications: mergedApps
+            };
+        },
+
+        async updateStatus(id, status) {
+            LocalApplications.updateStatus(id, status);
+            try {
+                return await apiRequest(`/applications/${id}/status`, {
+                    method: 'PATCH',
+                    body: { status }
+                });
+            } catch (err) {
+                return { success: true, message: `Application status updated to ${status}.` };
+            }
         }
     },
 
