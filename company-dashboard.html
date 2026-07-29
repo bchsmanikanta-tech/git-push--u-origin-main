@@ -305,12 +305,14 @@
             let outcomesChart = null;
 
             try {
+                const userEmail = (user.email || '').toLowerCase().trim();
+
                 // Fetch company's posted jobs
-                const jobsData = await API.jobs.getAll({ companyEmail: user.email });
+                const jobsData = await API.jobs.getAll({ companyEmail: userEmail });
                 const myJobs = jobsData.jobs || [];
                 
                 // Fetch applications details
-                const appsData = await API.applications.getForCompany(user.email);
+                const appsData = await API.applications.getForCompany(userEmail);
                 const apps = appsData.applications || [];
 
                 // Update Stats
@@ -324,7 +326,7 @@
 
                 // Load interviews count
                 try {
-                    const intRes = await API.interviews.getByUser(user.email);
+                    const intRes = await API.interviews.getByUser(userEmail);
                     document.getElementById('stat-meets-count').innerText = (intRes.interviews || []).length;
                 } catch(e) {
                     document.getElementById('stat-meets-count').innerText = '0';

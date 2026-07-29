@@ -120,12 +120,13 @@
             let myJobs = [];
 
             try {
+                const userEmail = (user.email || '').toLowerCase().trim();
                 const [profileData, jobsData] = await Promise.all([
-                    API.profile.getCompany(user.email).catch(() => null),
-                    API.jobs.getAll().catch(() => ({ jobs: [] }))
+                    API.profile.getCompany(userEmail).catch(() => null),
+                    API.jobs.getAll({ companyEmail: userEmail }).catch(() => ({ jobs: [] }))
                 ]);
                 if (profileData && profileData.profile) profile = profileData.profile;
-                if (jobsData && jobsData.jobs) myJobs = jobsData.jobs.filter(j => j.companyEmail === user.email);
+                if (jobsData && jobsData.jobs) myJobs = jobsData.jobs.filter(j => (j.companyEmail || '').toLowerCase().trim() === userEmail);
             } catch (err) {
                 console.warn("Using fallback company profile state:", err);
             }

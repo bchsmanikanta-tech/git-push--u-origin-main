@@ -134,7 +134,7 @@
                 const skills = document.getElementById('skills').value.trim();
                 const description = document.getElementById('description').value.trim();
 
-                const compEmail = user.email || 'hr@company.com';
+                const compEmail = (user.email || 'hr@company.com').toLowerCase().trim();
                 const finalCompName = document.getElementById('company-name').value.trim() || compName;
 
                 const jobData = {

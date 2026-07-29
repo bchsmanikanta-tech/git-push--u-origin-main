@@ -239,6 +239,8 @@ async function apiRequest(endpoint, options = {}) {
 
         if (isGet && data) {
             apiCache.set(cacheKey, { time: Date.now(), data });
+        } else if (!isGet) {
+            apiCache.clear();
         }
         return data;
     } catch (error) {
