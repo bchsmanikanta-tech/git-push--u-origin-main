@@ -179,13 +179,14 @@
                         return;
                     }
                     
-                    if (!companyEmail || companyEmail === 'undefined') companyEmail = 'hr@techcorp.com';
+                    const myEmail = (currentUser.email || '').toLowerCase().trim();
+                    const cleanCompEmail = (companyEmail && companyEmail !== 'undefined') ? companyEmail.toLowerCase().trim() : 'hr@techcorp.com';
                     if (!companyName || companyName === 'undefined') companyName = 'Hiring Recruiter';
                     if (!jobTitle || jobTitle === 'undefined') jobTitle = 'Job Position';
 
                     document.getElementById('chat-company-name').innerText = companyName;
                     document.getElementById('chat-company-subtext').innerText = `${jobTitle} • Recruiter Chat`;
-                    document.getElementById('chat-receiver-email').value = companyEmail;
+                    document.getElementById('chat-receiver-email').value = cleanCompEmail;
 
                     const modalEl = document.getElementById('candidateChatModal');
                     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -200,14 +201,17 @@
                         return;
                     }
 
-                    const res = await API.messages.getConversation(currentUser.email, companyEmail);
+                    const res = await API.messages.getConversation(myEmail, cleanCompEmail);
                     if (res && res.messages && res.messages.length) {
-                        historyBox.innerHTML = res.messages.map(m => `
-                            <div class="mb-2 p-2.5 rounded-3 ${m.senderEmail === currentUser.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
-                                <div class="small fw-normal">${m.message}</div>
-                                <span class="x-small ${m.senderEmail === currentUser.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                            </div>
-                        `).join('');
+                        historyBox.innerHTML = res.messages.map(m => {
+                            const isMe = (m.senderEmail || '').toLowerCase().trim() === myEmail;
+                            return `
+                                <div class="mb-2 p-2.5 rounded-3 ${isMe ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
+                                    <div class="small fw-normal">${m.message}</div>
+                                    <span class="x-small ${isMe ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                </div>
+                            `;
+                        }).join('');
                         historyBox.scrollTop = historyBox.scrollHeight;
                     } else {
                         historyBox.innerHTML = '<div class="text-center py-4 text-secondary small"><i class="bi bi-chat-dots fs-3 d-block mb-1"></i>No messages yet. Send a message to start chatting with the recruiter!</div>';
@@ -241,24 +245,28 @@
                     return;
                 }
 
-                const receiverEmail = document.getElementById('chat-receiver-email').value;
+                const myEmail = (currentUser.email || '').toLowerCase().trim();
+                const receiverEmail = (document.getElementById('chat-receiver-email').value || '').toLowerCase().trim();
                 const input = document.getElementById('chat-message-input');
                 const msg = input.value.trim();
                 if (!msg) return;
                 try {
-                    await API.messages.send({ senderEmail: currentUser.email, receiverEmail, message: msg });
+                    await API.messages.send({ senderEmail: myEmail, receiverEmail, message: msg });
                     input.value = '';
                     showToast('Message sent to employer!', 'success');
                     
                     const historyBox = document.getElementById('candidate-chat-history');
-                    const res = await API.messages.getConversation(currentUser.email, receiverEmail);
+                    const res = await API.messages.getConversation(myEmail, receiverEmail);
                     if (res && res.messages) {
-                        historyBox.innerHTML = res.messages.map(m => `
-                            <div class="mb-2 p-2.5 rounded-3 ${m.senderEmail === currentUser.email ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
-                                <div class="small fw-normal">${m.message}</div>
-                                <span class="x-small ${m.senderEmail === currentUser.email ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                            </div>
-                        `).join('');
+                        historyBox.innerHTML = res.messages.map(m => {
+                            const isMe = (m.senderEmail || '').toLowerCase().trim() === myEmail;
+                            return `
+                                <div class="mb-2 p-2.5 rounded-3 ${isMe ? 'bg-primary text-white ms-auto' : 'bg-white border text-dark'}" style="max-width: 80%;">
+                                    <div class="small fw-normal">${m.message}</div>
+                                    <span class="x-small ${isMe ? 'text-white-50' : 'text-muted'}" style="font-size: 10px;">${new Date(m.createdAt || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                </div>
+                            `;
+                        }).join('');
                         historyBox.scrollTop = historyBox.scrollHeight;
                     }
                 } catch (err) {

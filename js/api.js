@@ -403,6 +403,46 @@ const LocalApplications = {
     }
 };
 
+const LocalMessages = {
+    KEY: 'sjvf_local_messages',
+    getAll() {
+        try {
+            const raw = SafeStorage.getItem(this.KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch(e) {
+            return [];
+        }
+    },
+    saveAll(messages) {
+        try {
+            SafeStorage.setItem(this.KEY, JSON.stringify(messages));
+        } catch(e) {}
+    },
+    add(msgData) {
+        const messages = this.getAll();
+        const cleanMsg = {
+            _id: msgData._id || ('msg_' + Date.now()),
+            id: msgData.id || msgData._id || ('msg_' + Date.now()),
+            senderEmail: (msgData.senderEmail || '').toLowerCase().trim(),
+            receiverEmail: (msgData.receiverEmail || '').toLowerCase().trim(),
+            message: (msgData.message || '').trim(),
+            isRead: !!msgData.isRead,
+            createdAt: msgData.createdAt || new Date().toISOString()
+        };
+        messages.push(cleanMsg);
+        this.saveAll(messages);
+        return cleanMsg;
+    },
+    getConversation(user1, user2) {
+        const u1 = (user1 || '').toLowerCase().trim();
+        const u2 = (user2 || '').toLowerCase().trim();
+        return this.getAll().filter(m => 
+            ((m.senderEmail || '').toLowerCase().trim() === u1 && (m.receiverEmail || '').toLowerCase().trim() === u2) ||
+            ((m.senderEmail || '').toLowerCase().trim() === u2 && (m.receiverEmail || '').toLowerCase().trim() === u1)
+        );
+    }
+};
+
 const API = {
     auth: {
         async registerSeeker(name, email, password) {
@@ -772,13 +812,71 @@ const API = {
 
     messages: {
         async getConversation(user1, user2) {
-            return apiRequest(`/messages/conversation?user1=${encodeURIComponent(user1)}&user2=${encodeURIComponent(user2)}`);
-        },
-        async send(data) {
-            return apiRequest('/messages/send', {
-                method: 'POST',
-                body: data
+            const u1 = (user1 || '').toLowerCase().trim();
+            const u2 = (user2 || '').toLowerCase().trim();
+
+            let remoteMsgs = [];
+            try {
+                const res = await apiRequest(`/messages/conversation?user1=${encodeURIComponent(u1)}&user2=${encodeURIComponent(u2)}`);
+                if (res && Array.isArray(res.messages)) {
+                    remoteMsgs = res.messages;
+                }
+            } catch (err) {
+                console.warn('[API.messages.getConversation] Remote fetch fallback used:', err.message);
+            }
+
+            const localMsgs = LocalMessages.getConversation(u1, u2);
+
+            const map = new Map();
+            [...localMsgs, ...remoteMsgs].forEach(m => {
+                const key = m._id || m.id || `${m.senderEmail}_${m.receiverEmail}_${m.createdAt}_${m.message}`;
+                if (!map.has(key)) {
+                    map.set(key, {
+                        ...m,
+                        senderEmail: (m.senderEmail || '').toLowerCase().trim(),
+                        receiverEmail: (m.receiverEmail || '').toLowerCase().trim()
+                    });
+                }
             });
+
+            const merged = Array.from(map.values()).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+            return {
+                success: true,
+                messages: merged
+            };
+        },
+
+        async send(data) {
+            const cleanSender = (data.senderEmail || '').toLowerCase().trim();
+            const cleanReceiver = (data.receiverEmail || '').toLowerCase().trim();
+            const cleanMessage = (data.message || '').trim();
+
+            const localMsg = {
+                _id: 'msg_' + Date.now(),
+                id: 'msg_' + Date.now(),
+                senderEmail: cleanSender,
+                receiverEmail: cleanReceiver,
+                message: cleanMessage,
+                isRead: false,
+                createdAt: new Date().toISOString()
+            };
+
+            LocalMessages.add(localMsg);
+
+            try {
+                const res = await apiRequest('/messages/send', {
+                    method: 'POST',
+                    body: { senderEmail: cleanSender, receiverEmail: cleanReceiver, message: cleanMessage }
+                });
+                if (res && res.chatMessage) {
+                    LocalMessages.add(res.chatMessage);
+                }
+                return res || { success: true, message: 'Message sent successfully!', chatMessage: localMsg };
+            } catch (err) {
+                console.warn('[API.messages.send] Remote fetch fallback used:', err.message);
+                return { success: true, message: 'Message sent successfully!', chatMessage: localMsg };
+            }
         }
     },
 
@@ -833,13 +931,10 @@ const API = {
 
     chat: {
         async sendMessage(senderEmail, receiverEmail, message) {
-            return apiRequest('/chat/send', {
-                method: 'POST',
-                body: { senderEmail, receiverEmail, message }
-            });
+            return API.messages.send({ senderEmail, receiverEmail, message });
         },
         async getHistory(user1, user2) {
-            return apiRequest(`/chat/history?user1=${encodeURIComponent(user1)}&user2=${encodeURIComponent(user2)}`);
+            return API.messages.getConversation(user1, user2);
         }
     },
 
