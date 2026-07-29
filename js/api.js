@@ -183,41 +183,81 @@ const Session = {
     }
 };
 
-// In-memory fast API response cache (5s TTL)
+// Stale-While-Revalidate Persistent API Cache
 const apiCache = new Map();
 
-// API Fetch Wrapper
+function getCachedResponse(cacheKey) {
+    if (apiCache.has(cacheKey)) {
+        return apiCache.get(cacheKey).data;
+    }
+    try {
+        const stored = SafeStorage.getItem(`sjvf_cache_${cacheKey}`);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            apiCache.set(cacheKey, { time: Date.now(), data: parsed });
+            return parsed;
+        }
+    } catch (e) {}
+    return null;
+}
+
+function setCachedResponse(cacheKey, data) {
+    apiCache.set(cacheKey, { time: Date.now(), data });
+    try {
+        SafeStorage.setItem(`sjvf_cache_${cacheKey}`, JSON.stringify(data));
+    } catch (e) {}
+}
+
+function clearApiCache() {
+    apiCache.clear();
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('sjvf_cache_')) {
+                localStorage.removeItem(k);
+            }
+        }
+    } catch(e) {}
+}
+
+// API Fetch Wrapper with Instant Stale-While-Revalidate & 3.5s Fast Timeout
 async function apiRequest(endpoint, options = {}) {
     const isGet = !options.method || options.method.toUpperCase() === 'GET';
     const cacheKey = `${endpoint}`;
     
-    if (isGet && apiCache.has(cacheKey)) {
-        const cached = apiCache.get(cacheKey);
-        if (Date.now() - cached.time < 5000) {
-            return cached.data;
+    // Immediate Stale-While-Revalidate Cache Check for 0ms Latency
+    if (isGet) {
+        const cachedData = getCachedResponse(cacheKey);
+        if (cachedData) {
+            // Revalidate in background asynchronously
+            fetchRevalidate(endpoint, options, cacheKey).catch(() => null);
+            return cachedData;
         }
+    } else {
+        clearApiCache();
     }
 
-    if (!isGet) {
-        apiCache.clear(); // Invalidate cache on mutations
-    }
+    return fetchRevalidate(endpoint, options, cacheKey);
+}
 
+async function fetchRevalidate(endpoint, options = {}, cacheKey = '') {
+    const isGet = !options.method || options.method.toUpperCase() === 'GET';
     const url = `${API_BASE}${endpoint}`;
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    options.signal = controller.signal;
+    const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s fast timeout
+    const fetchOptions = { ...options, signal: controller.signal };
     
-    if (options.body && !(options.body instanceof FormData)) {
-        options.headers = {
+    if (fetchOptions.body && !(fetchOptions.body instanceof FormData) && typeof fetchOptions.body !== 'string') {
+        fetchOptions.headers = {
             'Content-Type': 'application/json',
-            ...(options.headers || {})
+            ...(fetchOptions.headers || {})
         };
-        options.body = JSON.stringify(options.body);
+        fetchOptions.body = JSON.stringify(fetchOptions.body);
     }
 
     try {
-        const response = await fetch(url, options);
+        const response = await fetch(url, fetchOptions);
         clearTimeout(timeoutId);
         
         let data;
@@ -238,22 +278,18 @@ async function apiRequest(endpoint, options = {}) {
         }
 
         if (isGet && data) {
-            apiCache.set(cacheKey, { time: Date.now(), data });
+            setCachedResponse(cacheKey || endpoint, data);
         } else if (!isGet) {
-            apiCache.clear();
+            clearApiCache();
         }
         return data;
     } catch (error) {
         clearTimeout(timeoutId);
-        console.error(`API Error [${endpoint}]:`, error.message);
-        
-        if (error.name === 'AbortError') {
-            showToast('⚠️ Request timed out. Backend server reconnecting.', 'warning');
-        } else if (error.message && error.message.includes('Failed to fetch')) {
-            showToast('⚠️ Server reconnecting. Please ensure npm start is running.', 'warning');
-        } else if (!error.message.includes('Unexpected token')) {
-            showToast(error.message || 'Network notice.', 'info');
+        if (isGet) {
+            const stale = getCachedResponse(cacheKey || endpoint);
+            if (stale) return stale;
         }
+        console.warn(`API Error [${endpoint}]:`, error.message);
         throw error;
     }
 }
