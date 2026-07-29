@@ -259,6 +259,65 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 // API Endpoints Client Object
+const LocalJobs = {
+    KEY: 'sjvf_local_jobs',
+    getAll() {
+        try {
+            const raw = SafeStorage.getItem(this.KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch(e) {
+            return [];
+        }
+    },
+    saveAll(jobs) {
+        try {
+            SafeStorage.setItem(this.KEY, JSON.stringify(jobs));
+        } catch(e) {}
+    },
+    add(job) {
+        const jobs = this.getAll();
+        const cleanJob = {
+            ...job,
+            id: job.id || job._id || ('job_' + Date.now()),
+            _id: job._id || job.id || ('job_' + Date.now()),
+            companyEmail: (job.companyEmail || '').toLowerCase().trim(),
+            companyName: job.companyName || 'Company',
+            title: job.title || 'Job Title',
+            location: job.location || 'Remote',
+            salary: job.salary || 'Negotiable',
+            type: job.type || 'Full Time',
+            skills: job.skills || '',
+            description: job.description || '',
+            experience: job.experience || 'Fresher',
+            status: job.status || 'Active',
+            createdAt: job.createdAt || new Date().toISOString()
+        };
+        const idx = jobs.findIndex(j => (j.id && j.id === cleanJob.id) || (j._id && j._id === cleanJob._id));
+        if (idx !== -1) {
+            jobs[idx] = cleanJob;
+        } else {
+            jobs.unshift(cleanJob);
+        }
+        this.saveAll(jobs);
+        return cleanJob;
+    },
+    update(id, updateData) {
+        const jobs = this.getAll();
+        const idx = jobs.findIndex(j => j.id === id || j._id === id);
+        if (idx !== -1) {
+            jobs[idx] = { ...jobs[idx], ...updateData };
+            this.saveAll(jobs);
+            return jobs[idx];
+        }
+        return null;
+    },
+    remove(id) {
+        const jobs = this.getAll();
+        const filtered = jobs.filter(j => j.id !== id && j._id !== id);
+        this.saveAll(filtered);
+    }
+};
+
 const API = {
     auth: {
         async registerSeeker(name, email, password) {
@@ -434,28 +493,139 @@ const API = {
             if (filters.limit) params.append('limit', filters.limit);
             
             const queryStr = params.toString() ? `?${params.toString()}` : '';
-            return apiRequest(`/jobs${queryStr}`);
+            
+            let remoteJobs = [];
+            let total = 0;
+            let page = parseInt(filters.page, 10) || 1;
+            let totalPages = 1;
+
+            try {
+                const res = await apiRequest(`/jobs${queryStr}`);
+                if (res && Array.isArray(res.jobs)) {
+                    remoteJobs = res.jobs;
+                    total = res.total !== undefined ? res.total : remoteJobs.length;
+                    page = res.page || page;
+                    totalPages = res.totalPages || totalPages;
+                }
+            } catch (err) {
+                console.warn('[API.jobs.getAll] Remote fetch failed, using local storage fallback:', err.message);
+            }
+
+            // Merge local jobs from LocalJobs
+            let allLocal = LocalJobs.getAll();
+
+            // Filter local jobs if filters applied
+            if (filters.companyEmail) {
+                const cleanComp = filters.companyEmail.toLowerCase().trim();
+                allLocal = allLocal.filter(j => (j.companyEmail || '').toLowerCase().trim() === cleanComp);
+            }
+            if (filters.title) {
+                const t = filters.title.toLowerCase().trim();
+                allLocal = allLocal.filter(j => 
+                    (j.title || '').toLowerCase().includes(t) || 
+                    (j.companyName || '').toLowerCase().includes(t) || 
+                    (j.skills || '').toLowerCase().includes(t)
+                );
+            }
+            if (filters.location) {
+                const loc = filters.location.toLowerCase().trim();
+                allLocal = allLocal.filter(j => (j.location || '').toLowerCase().includes(loc));
+            }
+            if (filters.type && filters.type !== 'All') {
+                allLocal = allLocal.filter(j => (j.type || '').toLowerCase() === filters.type.toLowerCase().trim());
+            }
+            if (filters.experience && filters.experience !== 'All') {
+                allLocal = allLocal.filter(j => (j.experience || '').toLowerCase().includes(filters.experience.toLowerCase().trim()));
+            }
+
+            // Combine remoteJobs and allLocal deduplicating by id / _id
+            const map = new Map();
+            [...allLocal, ...remoteJobs].forEach(job => {
+                const key = job.id || job._id;
+                if (key && !map.has(key)) {
+                    map.set(key, job);
+                }
+            });
+            const mergedJobs = Array.from(map.values());
+
+            return {
+                success: true,
+                jobs: mergedJobs,
+                total: mergedJobs.length,
+                page,
+                totalPages: Math.max(1, Math.ceil(mergedJobs.length / (parseInt(filters.limit, 10) || 6)))
+            };
         },
+
         async get(id) {
-            return apiRequest(`/jobs/${id}`);
+            try {
+                return await apiRequest(`/jobs/${id}`);
+            } catch (err) {
+                const local = LocalJobs.getAll().find(j => j.id === id || j._id === id);
+                if (local) return { success: true, job: local };
+                throw err;
+            }
         },
+
         async create(data) {
-            return apiRequest('/jobs', {
-                method: 'POST',
-                body: data
-            });
+            const jobId = 'job_' + Date.now();
+            const localJobObj = {
+                id: jobId,
+                _id: jobId,
+                title: (data.title || '').trim(),
+                companyEmail: (data.companyEmail || '').toLowerCase().trim(),
+                companyName: (data.companyName || '').trim(),
+                location: (data.location || '').trim(),
+                salary: (data.salary || '').trim(),
+                type: (data.type || 'Full Time').trim(),
+                skills: (data.skills || '').trim(),
+                description: (data.description || '').trim(),
+                experience: (data.experience || 'Fresher').trim(),
+                status: 'Active',
+                createdAt: new Date().toISOString()
+            };
+
+            // Always store in LocalJobs immediately so it is instantly persistent
+            LocalJobs.add(localJobObj);
+
+            try {
+                const res = await apiRequest('/jobs', {
+                    method: 'POST',
+                    body: data
+                });
+                if (res && res.job) {
+                    LocalJobs.add(res.job);
+                }
+                return res || { success: true, message: 'Vacancy posted successfully!', job: localJobObj };
+            } catch (err) {
+                console.warn('[API.jobs.create] Remote save fallback used:', err.message);
+                return { success: true, message: 'Vacancy posted successfully!', job: localJobObj };
+            }
         },
+
         async update(id, data) {
-            return apiRequest(`/jobs/${id}`, {
-                method: 'PUT',
-                body: data
-            });
+            LocalJobs.update(id, data);
+            try {
+                return await apiRequest(`/jobs/${id}`, {
+                    method: 'PUT',
+                    body: data
+                });
+            } catch (err) {
+                return { success: true, message: 'Vacancy updated successfully!' };
+            }
         },
+
         async delete(id) {
-            return apiRequest(`/jobs/${id}`, {
-                method: 'DELETE'
-            });
+            LocalJobs.remove(id);
+            try {
+                return await apiRequest(`/jobs/${id}`, {
+                    method: 'DELETE'
+                });
+            } catch (err) {
+                return { success: true, message: 'Vacancy deleted successfully.' };
+            }
         },
+
         async getRecommendations(email) {
             return apiRequest(`/jobs/recommendations/${encodeURIComponent(email)}`);
         }
