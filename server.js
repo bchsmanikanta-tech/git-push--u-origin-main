@@ -196,7 +196,8 @@ app.post('/api/auth/login-seeker', async (req, res) => {
             if (seeker.password !== password) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
-            memoryDB.seekers[cleanEmail] = { name: seeker.name || capName, email: cleanEmail, password, status: 'active', savedJobs: [] };
+            const existingSaved = (memoryDB.seekers[cleanEmail] && memoryDB.seekers[cleanEmail].savedJobs) || seeker.savedJobs || [];
+            memoryDB.seekers[cleanEmail] = { name: seeker.name || capName, email: cleanEmail, password, status: 'active', savedJobs: existingSaved };
             return res.status(200).json({ success: true, message: 'Login successful!', user: { name: seeker.name || capName, email: cleanEmail, role: 'seeker' } });
         }
 
@@ -1115,22 +1116,34 @@ app.delete('/api/notifications/clear/:email', async (req, res) => {
    SAVED JOBS
    ================================================================ */
 
-app.get('/api/saved-jobs/:email', async (req, res) => {
+const fetchSavedJobsList = async (email) => {
+    const cleanEmail = (email || '').toLowerCase().trim();
+    if (mongoose.connection.readyState !== 1) {
+        const seeker = memoryDB.seekers[cleanEmail];
+        if (!seeker || !seeker.savedJobs || seeker.savedJobs.length === 0) return [];
+        const savedSet = new Set(seeker.savedJobs.map(String));
+        return (memoryDB.jobs || []).filter(j => savedSet.has(String(j._id)) || savedSet.has(String(j.id)));
+    }
+    const seeker = await Jobseeker.findOne({ email: cleanEmail }).lean();
+    if (!seeker || !seeker.savedJobs || seeker.savedJobs.length === 0) return [];
+    
+    const savedIds = seeker.savedJobs.map(String);
+    const validObjectIds = savedIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    
+    const conditions = [{ id: { $in: savedIds } }];
+    if (validObjectIds.length > 0) {
+        conditions.push({ _id: { $in: validObjectIds } });
+    }
+    return await Job.find({ $or: conditions }).lean();
+};
+
+app.get(['/api/saved-jobs/:email', '/api/jobs/saved/:email'], async (req, res) => {
     try {
-        const email = req.params.email.toLowerCase();
-        let seeker = null;
-        if (mongoose.connection.readyState !== 1) {
-            seeker = memoryDB.seekers[email];
-            if (!seeker) return res.json({ success: true, jobs: [] });
-            const jobs = memoryDB.jobs.filter(j => (seeker.savedJobs || []).includes(j._id));
-            return res.json({ success: true, jobs });
-        }
-        seeker = await Jobseeker.findOne({ email }).lean();
-        if (!seeker) return res.json({ success: true, jobs: [] });
-        const jobs = await Job.find({ $or: [{ _id: { $in: seeker.savedJobs || [] } }, { id: { $in: seeker.savedJobs || [] } }] }).lean();
+        const jobs = await fetchSavedJobsList(req.params.email);
         res.json({ success: true, jobs });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Server error.' });
+        console.error('[GET SAVED JOBS ERROR]', error.message);
+        res.status(500).json({ success: false, message: 'Failed to fetch saved jobs.' });
     }
 });
 
@@ -1138,7 +1151,7 @@ app.post('/api/saved-jobs', async (req, res) => {
     const { email, jobId } = req.body;
     if (!email || !jobId) return res.status(400).json({ success: false, message: 'Email and Job ID are required.' });
     try {
-        const cleanEmail = email.toLowerCase();
+        const cleanEmail = email.toLowerCase().trim();
         if (mongoose.connection.readyState !== 1) {
             if (!memoryDB.seekers[cleanEmail]) {
                 memoryDB.seekers[cleanEmail] = { name: 'Jobseeker', email: cleanEmail, status: 'active', savedJobs: [] };
@@ -1147,16 +1160,21 @@ app.post('/api/saved-jobs', async (req, res) => {
             if (!memoryDB.seekers[cleanEmail].savedJobs.includes(jobId)) {
                 memoryDB.seekers[cleanEmail].savedJobs.push(jobId);
             }
-            return res.json({ success: true, message: 'Job bookmarked!', user: memoryDB.seekers[cleanEmail] });
+            return res.json({ success: true, message: 'Job bookmarked!', user: memoryDB.seekers[cleanEmail], savedJobs: memoryDB.seekers[cleanEmail].savedJobs });
         }
-        const updated = await Jobseeker.findOneAndUpdate(
-            { email: cleanEmail },
-            { $addToSet: { savedJobs: jobId } },
-            { new: true, lean: true }
-        );
-        res.json({ success: true, message: 'Job bookmarked!', user: updated });
+        let seeker = await Jobseeker.findOne({ email: cleanEmail });
+        if (!seeker) {
+            seeker = await Jobseeker.create({ name: 'Jobseeker', email: cleanEmail, password: 'password123', status: 'active', savedJobs: [] });
+        }
+        if (!seeker.savedJobs) seeker.savedJobs = [];
+        if (!seeker.savedJobs.includes(jobId)) {
+            seeker.savedJobs.push(jobId);
+            await seeker.save();
+        }
+        res.json({ success: true, message: 'Job bookmarked!', user: seeker.toObject(), savedJobs: seeker.savedJobs });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Server error.' });
+        console.error('[POST SAVED JOB ERROR]', error.message);
+        res.status(500).json({ success: false, message: 'Server error saving job.' });
     }
 });
 
@@ -1164,21 +1182,22 @@ app.delete('/api/saved-jobs', async (req, res) => {
     const { email, jobId } = req.body;
     if (!email || !jobId) return res.status(400).json({ success: false, message: 'Email and Job ID are required.' });
     try {
-        const cleanEmail = email.toLowerCase();
+        const cleanEmail = email.toLowerCase().trim();
         if (mongoose.connection.readyState !== 1) {
             if (memoryDB.seekers[cleanEmail] && memoryDB.seekers[cleanEmail].savedJobs) {
-                memoryDB.seekers[cleanEmail].savedJobs = memoryDB.seekers[cleanEmail].savedJobs.filter(id => id !== jobId);
+                memoryDB.seekers[cleanEmail].savedJobs = memoryDB.seekers[cleanEmail].savedJobs.filter(id => String(id) !== String(jobId));
             }
-            return res.json({ success: true, message: 'Bookmark removed!', user: memoryDB.seekers[cleanEmail] || {} });
+            return res.json({ success: true, message: 'Bookmark removed!', user: memoryDB.seekers[cleanEmail] || {}, savedJobs: memoryDB.seekers[cleanEmail]?.savedJobs || [] });
         }
         const updated = await Jobseeker.findOneAndUpdate(
             { email: cleanEmail },
             { $pull: { savedJobs: jobId } },
             { new: true, lean: true }
         );
-        res.json({ success: true, message: 'Bookmark removed!', user: updated });
+        res.json({ success: true, message: 'Bookmark removed!', user: updated || {}, savedJobs: updated?.savedJobs || [] });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Server error.' });
+        console.error('[DELETE SAVED JOB ERROR]', error.message);
+        res.status(500).json({ success: false, message: 'Server error removing saved job.' });
     }
 });
 
@@ -1894,10 +1913,31 @@ app.post('/api/jobs/save-toggle', async (req, res) => {
     try {
         const { email, jobId } = req.body;
         if (!email || !jobId) return res.status(400).json({ success: false, message: 'Email and jobId required' });
-        const seeker = await Jobseeker.findOne({ email: email.toLowerCase() });
-        if (!seeker) return res.status(404).json({ success: false, message: 'Seeker not found' });
+        const cleanEmail = email.toLowerCase().trim();
+
+        if (mongoose.connection.readyState !== 1) {
+            if (!memoryDB.seekers[cleanEmail]) {
+                memoryDB.seekers[cleanEmail] = { name: 'Jobseeker', email: cleanEmail, status: 'active', savedJobs: [] };
+            }
+            if (!memoryDB.seekers[cleanEmail].savedJobs) memoryDB.seekers[cleanEmail].savedJobs = [];
+            const index = memoryDB.seekers[cleanEmail].savedJobs.findIndex(id => String(id) === String(jobId));
+            let saved = false;
+            if (index > -1) {
+                memoryDB.seekers[cleanEmail].savedJobs.splice(index, 1);
+            } else {
+                memoryDB.seekers[cleanEmail].savedJobs.push(jobId);
+                saved = true;
+            }
+            return res.json({ success: true, saved, savedJobs: memoryDB.seekers[cleanEmail].savedJobs });
+        }
+
+        let seeker = await Jobseeker.findOne({ email: cleanEmail });
+        if (!seeker) {
+            seeker = await Jobseeker.create({ name: 'Jobseeker', email: cleanEmail, password: 'password123', status: 'active', savedJobs: [] });
+        }
         
-        const index = seeker.savedJobs.indexOf(jobId);
+        if (!seeker.savedJobs) seeker.savedJobs = [];
+        const index = seeker.savedJobs.findIndex(id => String(id) === String(jobId));
         let saved = false;
         if (index > -1) {
             seeker.savedJobs.splice(index, 1);
@@ -1908,17 +1948,7 @@ app.post('/api/jobs/save-toggle', async (req, res) => {
         await seeker.save();
         res.json({ success: true, saved, savedJobs: seeker.savedJobs });
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
-});
-
-app.get('/api/jobs/saved/:email', async (req, res) => {
-    try {
-        const seeker = await Jobseeker.findOne({ email: req.params.email.toLowerCase() });
-        if (!seeker) return res.status(404).json({ success: false, message: 'Seeker not found' });
-        const jobs = await Job.find({ $or: [{ _id: { $in: seeker.savedJobs } }, { id: { $in: seeker.savedJobs } }] });
-        res.json({ success: true, jobs: mapId(jobs) });
-    } catch (err) {
+        console.error('[SAVE TOGGLE ERROR]', err.message);
         res.status(500).json({ success: false, message: err.message });
     }
 });

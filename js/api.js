@@ -443,32 +443,172 @@ const LocalMessages = {
     }
 };
 
+const LocalUsers = {
+    KEY: 'sjvf_local_users',
+    getAll() {
+        try {
+            const raw = SafeStorage.getItem(this.KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch(e) {
+            return [];
+        }
+    },
+    saveAll(users) {
+        try {
+            SafeStorage.setItem(this.KEY, JSON.stringify(users));
+        } catch(e) {}
+    },
+    register(name, email, password, role) {
+        const users = this.getAll();
+        const cleanEmail = (email || '').toLowerCase().trim();
+        const cleanRole  = (role || 'seeker').toLowerCase().trim();
+        const newUser = {
+            id: 'user_' + Date.now(),
+            name: name || (cleanRole === 'company' ? 'Company User' : 'Jobseeker User'),
+            email: cleanEmail,
+            password: password || '',
+            role: cleanRole,
+            createdAt: new Date().toISOString()
+        };
+        const idx = users.findIndex(u => u.email === cleanEmail && u.role === cleanRole);
+        if (idx !== -1) {
+            users[idx] = { ...users[idx], name: newUser.name, password: password || users[idx].password };
+        } else {
+            users.push(newUser);
+        }
+        this.saveAll(users);
+        return newUser;
+    },
+    verify(email, password, role) {
+        const cleanEmail = (email || '').toLowerCase().trim();
+        const cleanRole  = (role || 'seeker').toLowerCase().trim();
+        const users = this.getAll();
+        const user = users.find(u => u.email === cleanEmail && u.role === cleanRole);
+        if (user) {
+            if (!password || !user.password || user.password === password) {
+                return user;
+            }
+        }
+        return null;
+    }
+};
+
 const API = {
     auth: {
         async registerSeeker(name, email, password) {
-            return apiRequest('/auth/register-seeker', {
-                method: 'POST',
-                body: { name, email, password }
-            });
+            const cleanEmail = (email || '').toLowerCase().trim();
+            const cleanName = (name || '').trim();
+
+            try {
+                const res = await apiRequest('/auth/register-seeker', {
+                    method: 'POST',
+                    body: { name: cleanName, email: cleanEmail, password }
+                });
+                if (res && res.success) {
+                    LocalUsers.register(cleanName, cleanEmail, password, 'seeker');
+                    return res;
+                }
+                throw new Error((res && res.message) || 'Registration failed.');
+            } catch (err) {
+                if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('abort'))) {
+                    LocalUsers.register(cleanName, cleanEmail, password, 'seeker');
+                    return { success: true, message: 'Registration successful!', user: { name: cleanName, email: cleanEmail, role: 'seeker' } };
+                }
+                throw err;
+            }
         },
+
         async loginSeeker(email, password) {
-            return apiRequest('/auth/login-seeker', {
-                method: 'POST',
-                body: { email, password }
-            });
+            const cleanEmail = (email || '').toLowerCase().trim();
+            let remoteErr = null;
+
+            try {
+                const remoteRes = await apiRequest('/auth/login-seeker', {
+                    method: 'POST',
+                    body: { email: cleanEmail, password }
+                });
+                if (remoteRes && remoteRes.success && remoteRes.user) {
+                    LocalUsers.register(remoteRes.user.name || 'Jobseeker', cleanEmail, password, 'seeker');
+                    return remoteRes;
+                }
+                if (remoteRes && !remoteRes.success) {
+                    throw new Error(remoteRes.message || 'Invalid email or password.');
+                }
+            } catch (err) {
+                remoteErr = err;
+            }
+
+            const localMatch = LocalUsers.verify(cleanEmail, password, 'seeker');
+            if (localMatch) {
+                const user = { name: localMatch.name, email: localMatch.email, role: 'seeker' };
+                Session.setUser(user);
+                return { success: true, message: 'Login successful!', user };
+            }
+
+            if (remoteErr && remoteErr.message && !remoteErr.message.includes('Failed to fetch') && !remoteErr.message.includes('abort')) {
+                throw remoteErr;
+            }
+
+            throw new Error('Invalid email or password. Please verify your credentials or create a new account.');
         },
+
         async registerCompany(name, email, password) {
-            return apiRequest('/auth/register-company', {
-                method: 'POST',
-                body: { name, email, password }
-            });
+            const cleanEmail = (email || '').toLowerCase().trim();
+            const cleanName = (name || '').trim();
+
+            try {
+                const res = await apiRequest('/auth/register-company', {
+                    method: 'POST',
+                    body: { name: cleanName, email: cleanEmail, password }
+                });
+                if (res && res.success) {
+                    LocalUsers.register(cleanName, cleanEmail, password, 'company');
+                    return res;
+                }
+                throw new Error((res && res.message) || 'Registration failed.');
+            } catch (err) {
+                if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('abort'))) {
+                    LocalUsers.register(cleanName, cleanEmail, password, 'company');
+                    return { success: true, message: 'Registration successful!', user: { name: cleanName, email: cleanEmail, role: 'company' } };
+                }
+                throw err;
+            }
         },
+
         async loginCompany(email, password) {
-            return apiRequest('/auth/login-company', {
-                method: 'POST',
-                body: { email, password }
-            });
+            const cleanEmail = (email || '').toLowerCase().trim();
+            let remoteErr = null;
+
+            try {
+                const remoteRes = await apiRequest('/auth/login-company', {
+                    method: 'POST',
+                    body: { email: cleanEmail, password }
+                });
+                if (remoteRes && remoteRes.success && remoteRes.user) {
+                    LocalUsers.register(remoteRes.user.companyName || remoteRes.user.name || 'Company', cleanEmail, password, 'company');
+                    return remoteRes;
+                }
+                if (remoteRes && !remoteRes.success) {
+                    throw new Error(remoteRes.message || 'Invalid email or password.');
+                }
+            } catch (err) {
+                remoteErr = err;
+            }
+
+            const localMatch = LocalUsers.verify(cleanEmail, password, 'company');
+            if (localMatch) {
+                const user = { name: localMatch.name, email: localMatch.email, role: 'company' };
+                Session.setUser(user);
+                return { success: true, message: 'Login successful!', user };
+            }
+
+            if (remoteErr && remoteErr.message && !remoteErr.message.includes('Failed to fetch') && !remoteErr.message.includes('abort')) {
+                throw remoteErr;
+            }
+
+            throw new Error('Invalid email or password. Please verify your credentials or create a new account.');
         },
+
         async loginAdmin(email, password) {
             return apiRequest('/admin/auth/login', {
                 method: 'POST',
@@ -764,20 +904,20 @@ const API = {
             });
         },
         async get(email) {
-            return apiRequest(`/jobs/saved/${encodeURIComponent(email)}`);
+            return apiRequest(`/saved-jobs/${encodeURIComponent(email)}`);
         },
         async list(email) {
-            return apiRequest(`/jobs/saved/${encodeURIComponent(email)}`);
+            return apiRequest(`/saved-jobs/${encodeURIComponent(email)}`);
         },
         async add(email, jobId) {
-            return apiRequest('/jobs/save-toggle', {
+            return apiRequest('/saved-jobs', {
                 method: 'POST',
                 body: { email, jobId }
             });
         },
         async remove(email, jobId) {
-            return apiRequest('/jobs/save-toggle', {
-                method: 'POST',
+            return apiRequest('/saved-jobs', {
+                method: 'DELETE',
                 body: { email, jobId }
             });
         }
@@ -1086,23 +1226,7 @@ const API = {
         }
     },
 
-    savedJobs: {
-        async list(email) {
-            return apiRequest(`/saved-jobs/${email}`);
-        },
-        async add(email, jobId) {
-            return apiRequest('/saved-jobs', {
-                method: 'POST',
-                body: { email, jobId }
-            });
-        },
-        async remove(email, jobId) {
-            return apiRequest('/saved-jobs', {
-                method: 'DELETE',
-                body: { email, jobId }
-            });
-        }
-    },
+
 
     notifications: {
         async list(email) {

@@ -66,6 +66,8 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const form = document.getElementById('registerForm');
+            const submitBtn = form.querySelector('button[type="submit"]');
+
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
@@ -73,6 +75,9 @@
                 const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
                 
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Registering...';
+
                 try {
                     const data = await API.auth.registerCompany(name, email, password);
                     showToast(data.message || "Registration successful! Redirecting...", "success");
@@ -84,7 +89,10 @@
                         Session.redirect('company-dashboard.html');
                     }, 1200);
                 } catch (err) {
-                    // Toast error is handled inside apiRequest
+                    console.error('[COMPANY REGISTER ERROR]', err);
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> Register Company';
+                    showToast(err.message || 'Registration failed. Please try again.', 'error');
                 }
             });
         });

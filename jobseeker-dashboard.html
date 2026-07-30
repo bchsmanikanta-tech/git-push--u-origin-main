@@ -518,8 +518,9 @@
                     }
 
                     jobs.forEach(job => {
+                        const realJobId = job.id || job._id;
                         let iconClass = 'bi-laptop';
-                        const title = job.title.toLowerCase();
+                        const title = (job.title || '').toLowerCase();
                         if (title.includes('java') || title.includes('developer') || title.includes('engineer')) iconClass = 'bi-code-slash';
                         if (title.includes('analyst') || title.includes('data')) iconClass = 'bi-bar-chart-line';
                         if (title.includes('designer') || title.includes('ux') || title.includes('ui')) iconClass = 'bi-palette';
@@ -532,17 +533,17 @@
                                             <div class="bg-primary bg-opacity-10 p-3 rounded-3 text-primary">
                                                 <i class="bi ${iconClass} fs-4"></i>
                                             </div>
-                                            <button class="btn btn-sm btn-outline-danger border-0 remove-bookmark-btn" data-job-id="${job.id}">
+                                            <button class="btn btn-sm btn-outline-danger border-0 remove-bookmark-btn" data-job-id="${realJobId}">
                                                 <i class="bi bi-trash3-fill"></i>
                                             </button>
                                         </div>
-                                        <h5 class="fw-bold mb-1" style="color: var(--text-primary);">${job.title}</h5>
-                                        <h6 class="text-primary small mb-3">${job.companyName}</h6>
-                                        <p class="small text-secondary mb-2"><i class="bi bi-geo-alt"></i> ${job.location}</p>
-                                        <p class="small text-secondary mb-3"><i class="bi bi-currency-rupee"></i> ${job.salary}</p>
+                                        <h5 class="fw-bold mb-1" style="color: var(--text-primary);">${job.title || 'Job Title'}</h5>
+                                        <h6 class="text-primary small mb-3">${job.companyName || 'Company'}</h6>
+                                        <p class="small text-secondary mb-2"><i class="bi bi-geo-alt"></i> ${job.location || 'Remote'}</p>
+                                        <p class="small text-secondary mb-3"><i class="bi bi-currency-rupee"></i> ${job.salary || 'Negotiable'}</p>
                                     </div>
                                     <div class="d-flex gap-2 mt-2">
-                                        <a href="job-details.html?id=${job.id}" class="btn btn-sm btn-primary rounded-pill w-100">View details</a>
+                                        <a href="job-details.html?id=${realJobId}" class="btn btn-sm btn-primary rounded-pill w-100">View details</a>
                                     </div>
                                 </div>
                             </div>

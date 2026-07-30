@@ -194,9 +194,10 @@
                         if (job.type === 'Part Time') badgeTypeClass = 'bg-secondary';
                         if (job.type === 'Internship') badgeTypeClass = 'bg-dark';
 
-                        const isSaved = (seekerProfile.savedJobs || []).includes(job.id);
+                        const realJobId = job.id || job._id;
+                        const isSaved = (seekerProfile.savedJobs || []).map(String).includes(String(realJobId));
                         const bookmarkButton = `
-                            <button class="btn btn-sm p-1 rounded-circle bookmark-btn" data-job-id="${job.id}" style="color: ${isSaved ? '#f59e0b' : '#cbd5e1'}; font-size: 20px; border: 0; background: transparent; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
+                            <button class="btn btn-sm p-1 rounded-circle bookmark-btn" data-job-id="${realJobId}" style="color: ${isSaved ? '#f59e0b' : '#cbd5e1'}; font-size: 20px; border: 0; background: transparent; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
                                 <i class="bi ${isSaved ? 'bi-star-fill' : 'bi-star'}"></i>
                             </button>
                         `;
@@ -224,7 +225,7 @@
                                             <i class="bi bi-currency-rupee text-muted"></i> Salary: <b>${job.salary}</b>
                                         </p>
                                     </div>
-                                    <a href="job-details.html?id=${job.id}" class="btn btn-premium btn-premium-primary w-100 py-2.5 mt-2">
+                                    <a href="job-details.html?id=${realJobId}" class="btn btn-premium btn-premium-primary w-100 py-2.5 mt-2">
                                         View Details
                                     </a>
                                 </div>
@@ -238,11 +239,11 @@
                             e.preventDefault();
                             e.stopPropagation();
                             const jobId = btn.dataset.jobId;
-                            const isSaved = (seekerProfile.savedJobs || []).includes(jobId);
+                            const isSavedNow = (seekerProfile.savedJobs || []).map(String).includes(String(jobId));
                             try {
-                                if (isSaved) {
+                                if (isSavedNow) {
                                     await API.savedJobs.remove(user.email, jobId);
-                                    seekerProfile.savedJobs = seekerProfile.savedJobs.filter(id => id !== jobId);
+                                    seekerProfile.savedJobs = (seekerProfile.savedJobs || []).filter(id => String(id) !== String(jobId));
                                     btn.style.color = '#cbd5e1';
                                     btn.innerHTML = '<i class="bi bi-star"></i>';
                                     showToast("Bookmark removed!", "info");
@@ -256,6 +257,7 @@
                                 }
                             } catch (bookmarkErr) {
                                 console.error("Failed to update bookmark:", bookmarkErr);
+                                showToast("Failed to update bookmark", "error");
                             }
                         });
                     });
