@@ -500,10 +500,15 @@
                             ${j.skills ? `<div class="small text-secondary mb-3"><i class="bi bi-tools me-1 text-primary"></i>${j.skills.substring(0, 45)}...</div>` : ''}
                         </div>
                         
-                        <!-- View Details Button -->
-                        <a href="job-details.html?id=${j.id||j._id}" class="btn btn-outline-primary w-100 rounded-pill fw-semibold mt-3">
-                            <i class="bi bi-eye-fill me-1"></i> View Details
-                        </a>
+                        <!-- View Details & Save Buttons -->
+                        <div class="d-flex gap-2 mt-3">
+                            <a href="job-details.html?id=${j.id||j._id}" class="btn btn-outline-primary flex-grow-1 rounded-pill fw-semibold">
+                                <i class="bi bi-eye-fill me-1"></i> View Details
+                            </a>
+                            <a href="job-details.html?id=${j.id||j._id}" class="btn btn-outline-warning rounded-pill fw-semibold px-3" title="Save Job">
+                                <i class="bi bi-star me-1"></i> Save
+                            </a>
+                        </div>
                     </div>
                 </div>
             `).join('');
