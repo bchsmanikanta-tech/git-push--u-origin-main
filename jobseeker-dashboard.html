@@ -235,15 +235,17 @@
                         </div>
                         
                         <div class="col-md-3">
-                            <div class="stat-card-gradient">
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <span class="text-secondary small fw-bold text-uppercase">Shortlisted / Selected</span>
-                                    <div class="p-2 rounded-circle bg-success bg-opacity-10 text-success">
-                                        <i class="bi bi-check-circle-fill fs-5"></i>
+                            <a href="#" id="card-saved-jobs-trigger" class="text-decoration-none">
+                                <div class="stat-card-gradient">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <span class="text-secondary small fw-bold text-uppercase">Saved Jobs</span>
+                                        <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning">
+                                            <i class="bi bi-bookmark-star-fill fs-5"></i>
+                                        </div>
                                     </div>
+                                    <h2 class="fw-bold mb-0 text-dark" id="stat-saved-count-overview">0</h2>
                                 </div>
-                                <h2 class="fw-bold mb-0 text-dark" id="stat-selected-jobs">0</h2>
-                            </div>
+                            </a>
                         </div>
 
                         <div class="col-md-3">
@@ -400,7 +402,10 @@
 
                 <!-- Saved Jobs Tab View -->
                 <div id="saved-jobs-view" class="d-none">
-                    <h3 class="fw-bold mb-4" style="color: var(--text-primary);"><i class="bi bi-bookmark-star-fill text-warning me-2"></i>My Saved Bookmarks</h3>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h3 class="fw-bold mb-0" style="color: var(--text-primary);"><i class="bi bi-bookmark-star-fill text-warning me-2"></i>My Saved Bookmarks</h3>
+                        <span class="badge bg-warning bg-opacity-15 text-warning fw-bold px-3 py-2 rounded-pill"><span id="stat-saved-count">0</span> Saved Jobs</span>
+                    </div>
                     <div class="row g-4" id="saved-jobs-container">
                         <div class="col-12 text-center py-5">
                             <div class="spinner-border text-primary" role="status"></div>
@@ -485,6 +490,9 @@
             menuSavedJobs.addEventListener('click', (e) => { e.preventDefault(); switchView('saved'); });
             if (menuRecommended) menuRecommended.addEventListener('click', (e) => { e.preventDefault(); switchView('recommended'); });
 
+            const cardSavedTrigger = document.getElementById('card-saved-jobs-trigger');
+            if (cardSavedTrigger) cardSavedTrigger.addEventListener('click', (e) => { e.preventDefault(); switchView('saved'); });
+
             const viewAllRecsBtn = document.getElementById('view-all-recommendations-btn');
             if (viewAllRecsBtn) viewAllRecsBtn.addEventListener('click', () => switchView('recommended'));
 
@@ -503,7 +511,10 @@
                     const jobs = res.jobs || [];
                     container.innerHTML = '';
 
-                    document.getElementById('stat-saved-count').innerText = jobs.length;
+                    const countElem = document.getElementById('stat-saved-count');
+                    if (countElem) countElem.innerText = jobs.length;
+                    const overviewCountElem = document.getElementById('stat-saved-count-overview');
+                    if (overviewCountElem) overviewCountElem.innerText = jobs.length;
 
                     if (jobs.length === 0) {
                         container.innerHTML = `
