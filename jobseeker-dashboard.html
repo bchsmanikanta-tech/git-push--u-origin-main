@@ -126,16 +126,16 @@
                 <div class="py-4">
                     <h4 class="menu-title px-3 mb-3 text-uppercase text-secondary small fw-bold tracking-wider">Navigation Menu</h4>
                     <div class="px-3">
-                        <a href="#" class="menu-link active" id="menu-dashboard">
+                        <a href="#" class="menu-link active" id="menu-dashboard" onclick="if(window.switchView) window.switchView('dashboard'); return false;">
                             <i class="bi bi-grid-1x2-fill"></i> Dashboard Overview
                         </a>
                         <a href="jobs.html" class="menu-link">
                             <i class="bi bi-search"></i> Search Vacancies
                         </a>
-                        <a href="#" class="menu-link" id="menu-recommended-jobs">
+                        <a href="#" class="menu-link" id="menu-recommended-jobs" onclick="if(window.switchView) window.switchView('recommended'); return false;">
                             <i class="bi bi-stars text-purple" style="color: #7c3aed;"></i> AI Recommended
                         </a>
-                        <a href="#" class="menu-link" id="menu-saved-jobs">
+                        <a href="#" class="menu-link" id="menu-saved-jobs" onclick="if(window.switchView) window.switchView('saved'); return false;">
                             <i class="bi bi-bookmark-star-fill text-warning"></i> Saved Bookmarks
                         </a>
                         <a href="my-applications.html" class="menu-link">
@@ -235,7 +235,7 @@
                         </div>
                         
                         <div class="col-md-3">
-                            <a href="#" id="card-saved-jobs-trigger" class="text-decoration-none">
+                            <a href="#" id="card-saved-jobs-trigger" onclick="if(window.switchView) window.switchView('saved'); return false;" class="text-decoration-none">
                                 <div class="stat-card-gradient">
                                     <div class="d-flex align-items-center justify-content-between mb-2">
                                         <span class="text-secondary small fw-bold text-uppercase">Saved Jobs</span>
@@ -458,27 +458,29 @@
             const recommendedJobsView = document.getElementById('recommended-jobs-view');
 
             function switchView(viewName) {
-                menuDashboard.classList.remove('active');
-                menuSavedJobs.classList.remove('active');
+                if (menuDashboard) menuDashboard.classList.remove('active');
+                if (menuSavedJobs) menuSavedJobs.classList.remove('active');
                 if (menuRecommended) menuRecommended.classList.remove('active');
                 
-                mainView.classList.add('d-none');
-                savedJobsView.classList.add('d-none');
-                recommendedJobsView.classList.add('d-none');
+                if (mainView) mainView.classList.add('d-none');
+                if (savedJobsView) savedJobsView.classList.add('d-none');
+                if (recommendedJobsView) recommendedJobsView.classList.add('d-none');
 
                 if (viewName === 'dashboard') {
-                    menuDashboard.classList.add('active');
-                    mainView.classList.remove('d-none');
+                    if (menuDashboard) menuDashboard.classList.add('active');
+                    if (mainView) mainView.classList.remove('d-none');
                 } else if (viewName === 'saved') {
-                    menuSavedJobs.classList.add('active');
-                    savedJobsView.classList.remove('d-none');
+                    if (menuSavedJobs) menuSavedJobs.classList.add('active');
+                    if (savedJobsView) savedJobsView.classList.remove('d-none');
                     loadSavedJobs();
                 } else if (viewName === 'recommended') {
                     if (menuRecommended) menuRecommended.classList.add('active');
-                    recommendedJobsView.classList.remove('d-none');
+                    if (recommendedJobsView) recommendedJobsView.classList.remove('d-none');
                     loadRecommendedJobs();
                 }
             }
+
+            window.switchView = switchView;
 
             // Check tab query parameter
             const urlParams = new URLSearchParams(window.location.search);
@@ -579,6 +581,9 @@
             }
 
             try {
+                // Pre-load saved jobs count for dashboard overview card
+                loadSavedJobs();
+
                 // Load all jobs for available counter
                 const jobsData = await API.jobs.getAll();
                 document.getElementById('stat-available-jobs').innerText = jobsData.total || jobsData.jobs.length;
