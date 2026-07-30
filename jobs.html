@@ -117,8 +117,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // Auth check
-            const user = Session.checkAuth('seeker');
-            if (!user) return;
+            const user = Session.getUser();
 
             let currentPage = 1;
             let currentFilters = {};
@@ -140,10 +139,19 @@
                 pagContainer.innerHTML = '';
 
                 try {
-                    // Load profile first to get savedJobs if not loaded
+                    // Load profile to get savedJobs if user is logged in
+                    if (user && user.email && !seekerProfile) {
+                        try {
+                            const profileRes = await API.profile.getSeeker(user.email);
+                            if (profileRes && profileRes.profile) {
+                                seekerProfile = profileRes.profile;
+                            }
+                        } catch (pErr) {
+                            console.warn('[JOBS] Profile notice:', pErr.message);
+                        }
+                    }
                     if (!seekerProfile) {
-                        const profileRes = await API.profile.getSeeker(user.email);
-                        seekerProfile = profileRes.profile;
+                        seekerProfile = { savedJobs: [] };
                     }
 
                     // Prepare query payload
@@ -238,6 +246,10 @@
                         btn.addEventListener('click', async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
+                            if (!user || !user.email) {
+                                showToast("Please sign in to bookmark jobs.", "warning");
+                                return;
+                            }
                             const jobId = btn.dataset.jobId;
                             const isSavedNow = (seekerProfile.savedJobs || []).map(String).includes(String(jobId));
                             try {
