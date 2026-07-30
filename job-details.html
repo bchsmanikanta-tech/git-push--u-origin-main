@@ -483,20 +483,70 @@
                     }
                 }
 
-                // Render Action Button
+                // Render Action Buttons (Apply Now & Save Job)
                 const btnWrapper = document.getElementById('apply-btn-wrapper');
+                let isSaved = false;
+                if (seekerData && seekerData.profile && seekerData.profile.savedJobs) {
+                    isSaved = (seekerData.profile.savedJobs || []).map(String).includes(String(jobId));
+                }
+
+                const saveBtnHtml = `
+                    <button id="save-job-btn" class="btn ${isSaved ? 'btn-warning text-dark' : 'btn-outline-warning'} py-3 px-4 shadow-sm fw-semibold ms-2">
+                        <i class="bi ${isSaved ? 'bi-star-fill' : 'bi-star'} me-1"></i>
+                        ${isSaved ? 'Saved' : 'Save Job'}
+                    </button>
+                `;
+
                 if (alreadyApplied) {
                     btnWrapper.innerHTML = `
-                        <button class="btn btn-secondary btn-premium py-3 px-4" disabled>
-                            <i class="bi bi-check-all fs-5"></i> Already Applied
-                        </button>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <button class="btn btn-secondary btn-premium py-3 px-4" disabled>
+                                <i class="bi bi-check-all fs-5"></i> Already Applied
+                            </button>
+                            ${saveBtnHtml}
+                        </div>
                     `;
                 } else {
                     btnWrapper.innerHTML = `
-                        <a href="apply-jobs.html?jobId=${jobId}" class="btn btn-premium btn-premium-secondary py-3 px-4 shadow">
-                            <i class="bi bi-send-fill fs-5"></i> Apply Now
-                        </a>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <a href="apply-jobs.html?jobId=${jobId}" class="btn btn-premium btn-premium-secondary py-3 px-4 shadow">
+                                <i class="bi bi-send-fill fs-5"></i> Apply Now
+                            </a>
+                            ${saveBtnHtml}
+                        </div>
                     `;
+                }
+
+                // Bind Save Job click event
+                const saveBtn = document.getElementById('save-job-btn');
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', async () => {
+                        if (!user || !user.email) {
+                            showToast("Please sign in as a job seeker to save jobs.", "warning");
+                            return;
+                        }
+                        try {
+                            saveBtn.disabled = true;
+                            if (isSaved) {
+                                await API.savedJobs.remove(user.email, jobId);
+                                isSaved = false;
+                                saveBtn.className = 'btn btn-outline-warning py-3 px-4 shadow-sm fw-semibold ms-2';
+                                saveBtn.innerHTML = '<i class="bi bi-star me-1"></i> Save Job';
+                                showToast("Job removed from saved list!", "info");
+                            } else {
+                                await API.savedJobs.add(user.email, jobId);
+                                isSaved = true;
+                                saveBtn.className = 'btn btn-warning text-dark py-3 px-4 shadow-sm fw-semibold ms-2';
+                                saveBtn.innerHTML = '<i class="bi bi-star-fill me-1"></i> Saved';
+                                showToast("Job saved successfully!", "success");
+                            }
+                        } catch (saveErr) {
+                            console.error("Failed to toggle save job:", saveErr);
+                            showToast("Failed to save job", "error");
+                        } finally {
+                            saveBtn.disabled = false;
+                        }
+                    });
                 }
 
                 // Toggle visibility
