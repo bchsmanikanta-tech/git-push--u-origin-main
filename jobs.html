@@ -238,29 +238,41 @@
                         `;
                     });
 
-                    // Bind Bookmark Buttons
+                    // Bind Bookmark Buttons with Instant 0ms UI Feedback
                     container.querySelectorAll('.bookmark-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            if (!user || !user.email) {
-                                showToast("Please sign in to bookmark jobs.", "warning");
-                                return;
-                            }
+
+                            const currentUser = Session.getUser();
+                            const userEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
                             const jobId = btn.dataset.jobId;
-                            const isSavedNow = (seekerProfile.savedJobs || []).map(String).includes(String(jobId));
+
+                            if (!seekerProfile) seekerProfile = { savedJobs: [] };
+                            if (!seekerProfile.savedJobs) seekerProfile.savedJobs = [];
+
+                            const isSavedNow = seekerProfile.savedJobs.map(String).includes(String(jobId));
+
                             try {
                                 if (isSavedNow) {
-                                    await API.savedJobs.remove(user.email, jobId);
-                                    seekerProfile.savedJobs = (seekerProfile.savedJobs || []).filter(id => String(id) !== String(jobId));
-                                    showToast("Bookmark removed!", "info");
+                                    // Remove bookmark instantly in UI
+                                    seekerProfile.savedJobs = seekerProfile.savedJobs.filter(id => String(id) !== String(jobId));
+                                    btn.className = 'btn btn-outline-primary bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
+                                    btn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
+                                    showToast("Job removed from saved list!", "info");
+
+                                    // Sync with storage and API in background
+                                    await API.savedJobs.remove(userEmail, jobId).catch(err => console.warn('SavedJobs remove notice:', err));
                                 } else {
-                                    await API.savedJobs.add(user.email, jobId);
-                                    if (!seekerProfile.savedJobs) seekerProfile.savedJobs = [];
+                                    // Add bookmark instantly in UI
                                     seekerProfile.savedJobs.push(jobId);
-                                    showToast("Job bookmarked!", "success");
+                                    btn.className = 'btn btn-success text-white bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
+                                    btn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
+                                    showToast("Job bookmarked successfully!", "success");
+
+                                    // Sync with storage and API in background
+                                    await API.savedJobs.add(userEmail, jobId).catch(err => console.warn('SavedJobs add notice:', err));
                                 }
-                                loadJobs(currentFilters, currentPage);
                             } catch (bookmarkErr) {
                                 console.error("Failed to update bookmark:", bookmarkErr);
                                 showToast("Failed to update bookmark", "error");

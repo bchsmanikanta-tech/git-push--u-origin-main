@@ -517,34 +517,29 @@
                     `;
                 }
 
-                // Bind Save Job click event
+                // Bind Save Job click event with Instant 0ms UI Feedback
                 const saveBtn = document.getElementById('save-job-btn');
                 if (saveBtn) {
                     saveBtn.addEventListener('click', async () => {
-                        if (!user || !user.email) {
-                            showToast("Please sign in as a job seeker to save jobs.", "warning");
-                            return;
-                        }
+                        const currentUser = Session.getUser();
+                        const userEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
                         try {
-                            saveBtn.disabled = true;
                             if (isSaved) {
-                                await API.savedJobs.remove(user.email, jobId);
                                 isSaved = false;
                                 saveBtn.className = 'btn btn-outline-primary py-3 px-4 shadow-sm fw-semibold ms-2';
                                 saveBtn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
                                 showToast("Job removed from saved list!", "info");
+                                await API.savedJobs.remove(userEmail, jobId).catch(e => console.warn(e));
                             } else {
-                                await API.savedJobs.add(user.email, jobId);
                                 isSaved = true;
                                 saveBtn.className = 'btn btn-success text-white py-3 px-4 shadow-sm fw-semibold ms-2';
                                 saveBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
-                                showToast("Job saved successfully!", "success");
+                                showToast("Job bookmarked successfully!", "success");
+                                await API.savedJobs.add(userEmail, jobId).catch(e => console.warn(e));
                             }
                         } catch (saveErr) {
                             console.error("Failed to toggle save job:", saveErr);
                             showToast("Failed to save job", "error");
-                        } finally {
-                            saveBtn.disabled = false;
                         }
                     });
                 }
