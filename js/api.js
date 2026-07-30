@@ -128,6 +128,13 @@ const Session = {
     setUser(user) {
         try {
             SafeStorage.setItem('user', JSON.stringify(user));
+            if (user && user.email) {
+                const cleanEmail = user.email.toLowerCase().trim();
+                const guestSaved = LocalSavedJobs.get('guest');
+                if (guestSaved && guestSaved.length > 0) {
+                    guestSaved.forEach(jobId => LocalSavedJobs.add(cleanEmail, jobId));
+                }
+            }
         } catch (e) {}
     },
     clear() {
