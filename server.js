@@ -144,7 +144,7 @@ app.post('/api/auth/register-seeker', async (req, res) => {
         try {
             await registerInFirebase(cleanEmail, password);
         } catch (fbErr) {
-            if (fbErr.message.includes('EMAIL_EXISTS')) {
+            if (fbErr.message && fbErr.message.includes('EMAIL_EXISTS')) {
                 return res.status(400).json({ success: false, message: 'Email already registered.' });
             } else {
                 console.warn('[FIREBASE REGISTER WARNING] Registration skipped/failed:', fbErr.message);
@@ -156,7 +156,7 @@ app.post('/api/auth/register-seeker', async (req, res) => {
 
         // Save to MongoDB if connected
         if (mongoose.connection.readyState === 1) {
-            const existing = await Jobseeker.findOne({ email: cleanEmail });
+            const existing = await Jobseeker.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
             if (existing) return res.status(400).json({ success: false, message: 'Email already registered.' });
             await Jobseeker.create({ name, email: cleanEmail, password });
         }
@@ -189,7 +189,7 @@ app.post('/api/auth/login-seeker', async (req, res) => {
         const memSeeker = memoryDB.seekers[cleanEmail];
         let seeker = null;
         if (mongoose.connection.readyState === 1) {
-            seeker = await Jobseeker.findOne({ email: cleanEmail });
+            seeker = await Jobseeker.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
         }
 
         if (seeker) {
@@ -239,7 +239,7 @@ app.post('/api/auth/register-company', async (req, res) => {
         try {
             await registerInFirebase(cleanEmail, password);
         } catch (fbErr) {
-            if (fbErr.message.includes('EMAIL_EXISTS')) {
+            if (fbErr.message && fbErr.message.includes('EMAIL_EXISTS')) {
                 return res.status(400).json({ success: false, message: 'Company email already registered.' });
             } else {
                 console.warn('[FIREBASE REGISTER WARNING] Registration skipped/failed:', fbErr.message);
@@ -249,7 +249,7 @@ app.post('/api/auth/register-company', async (req, res) => {
         memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password, status: 'active', industry: '', location: '' };
 
         if (mongoose.connection.readyState === 1) {
-            const existing = await Company.findOne({ email: cleanEmail });
+            const existing = await Company.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
             if (existing) return res.status(400).json({ success: false, message: 'Company email already registered.' });
             await Company.create({ name, email: cleanEmail, password });
         }
@@ -282,7 +282,7 @@ app.post('/api/auth/login-company', async (req, res) => {
         const memCompany = memoryDB.companies[cleanEmail];
         let company = null;
         if (mongoose.connection.readyState === 1) {
-            company = await Company.findOne({ email: cleanEmail });
+            company = await Company.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
         }
 
         if (company) {
