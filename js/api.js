@@ -986,21 +986,40 @@ const API = {
                     remoteJobs = res.jobs;
                 }
             } catch (err) {
-                console.warn('[API.savedJobs.list] Local fallback used:', err.message);
+                console.warn('[API.savedJobs.list] Remote fetch fallback used:', err.message);
             }
 
             const localSavedIds = LocalSavedJobs.get(cleanEmail).map(String);
-            const allLocalJobs = LocalJobs.getAll();
-            const localSavedObjects = allLocalJobs.filter(j => localSavedIds.includes(String(j.id || j._id)));
+            let allJobs = [];
+            try {
+                const allJobsRes = await API.jobs.getAll();
+                if (allJobsRes && Array.isArray(allJobsRes.jobs)) {
+                    allJobs = allJobsRes.jobs;
+                }
+            } catch (e) {}
 
             const map = new Map();
-            [...localSavedObjects, ...remoteJobs].forEach(job => {
-                const key = job.id || job._id;
-                if (key && !map.has(key)) {
-                    map.set(key, job);
+            
+            // Add remoteJobs if valid objects
+            remoteJobs.forEach(j => {
+                if (j && typeof j === 'object') {
+                    const key = String(j.id || j._id || '');
+                    if (key) map.set(key, j);
                 }
             });
-            const mergedJobs = Array.from(map.values());
+
+            // Match saved IDs against allJobs
+            const savedSet = new Set(localSavedIds);
+            allJobs.forEach(j => {
+                if (j && typeof j === 'object') {
+                    const key = String(j.id || j._id || '');
+                    if (key && (savedSet.has(key) || savedSet.has(String(j._id)) || savedSet.has(String(j.id)))) {
+                        map.set(key, j);
+                    }
+                }
+            });
+
+            const mergedJobs = Array.from(map.values()).filter(j => j && typeof j === 'object' && (j.id || j._id));
 
             return {
                 success: true,
