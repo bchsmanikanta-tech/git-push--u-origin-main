@@ -204,11 +204,6 @@
 
                         const realJobId = job.id || job._id;
                         const isSaved = (seekerProfile.savedJobs || []).map(String).includes(String(realJobId));
-                        const bookmarkIcon = `
-                            <button class="btn btn-sm p-1 rounded-circle bookmark-btn" data-job-id="${realJobId}" style="color: ${isSaved ? '#f59e0b' : '#cbd5e1'}; font-size: 20px; border: 0; background: transparent; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
-                                <i class="bi ${isSaved ? 'bi-star-fill' : 'bi-star'}"></i>
-                            </button>
-                        `;
 
                         container.innerHTML += `
                             <div class="col-md-6 col-lg-4">
@@ -218,10 +213,7 @@
                                             <div class="bg-light p-3 rounded-3 text-primary">
                                                 <i class="bi ${iconClass} fs-3"></i>
                                             </div>
-                                            <div class="d-flex align-items-center gap-2">
-                                                <span class="badge ${badgeTypeClass} px-2.5 py-1.5 rounded-pill small">${job.type}</span>
-                                                ${bookmarkIcon}
-                                            </div>
+                                            <span class="badge ${badgeTypeClass} px-3 py-2 rounded-pill small">${job.type}</span>
                                         </div>
                                         <h4 class="fw-bold mb-1" style="color: var(--text-primary);">${job.title}</h4>
                                         <h6 class="text-primary fw-semibold mb-3">${job.companyName}</h6>
@@ -237,8 +229,8 @@
                                         <a href="job-details.html?id=${realJobId}" class="btn btn-premium btn-premium-primary flex-grow-1 py-2.5">
                                             View Details
                                         </a>
-                                        <button class="btn ${isSaved ? 'btn-warning text-dark' : 'btn-outline-warning'} bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center" data-job-id="${realJobId}">
-                                            <i class="bi ${isSaved ? 'bi-star-fill' : 'bi-star'} me-1"></i> ${isSaved ? 'Saved' : 'Save'}
+                                        <button class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-primary'} bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center" data-job-id="${realJobId}">
+                                            <i class="bi ${isSaved ? 'bi-check-circle-fill' : 'bi-bookmark-plus'} me-1.5"></i> ${isSaved ? 'Saved' : 'Save Job'}
                                         </button>
                                     </div>
                                 </div>

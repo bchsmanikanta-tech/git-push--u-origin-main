@@ -491,8 +491,8 @@
                 }
 
                 const saveBtnHtml = `
-                    <button id="save-job-btn" class="btn ${isSaved ? 'btn-warning text-dark' : 'btn-outline-warning'} py-3 px-4 shadow-sm fw-semibold ms-2">
-                        <i class="bi ${isSaved ? 'bi-star-fill' : 'bi-star'} me-1"></i>
+                    <button id="save-job-btn" class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-primary'} py-3 px-4 shadow-sm fw-semibold ms-2">
+                        <i class="bi ${isSaved ? 'bi-check-circle-fill' : 'bi-bookmark-plus'} me-1.5"></i>
                         ${isSaved ? 'Saved' : 'Save Job'}
                     </button>
                 `;
@@ -530,14 +530,14 @@
                             if (isSaved) {
                                 await API.savedJobs.remove(user.email, jobId);
                                 isSaved = false;
-                                saveBtn.className = 'btn btn-outline-warning py-3 px-4 shadow-sm fw-semibold ms-2';
-                                saveBtn.innerHTML = '<i class="bi bi-star me-1"></i> Save Job';
+                                saveBtn.className = 'btn btn-outline-primary py-3 px-4 shadow-sm fw-semibold ms-2';
+                                saveBtn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
                                 showToast("Job removed from saved list!", "info");
                             } else {
                                 await API.savedJobs.add(user.email, jobId);
                                 isSaved = true;
-                                saveBtn.className = 'btn btn-warning text-dark py-3 px-4 shadow-sm fw-semibold ms-2';
-                                saveBtn.innerHTML = '<i class="bi bi-star-fill me-1"></i> Saved';
+                                saveBtn.className = 'btn btn-success text-white py-3 px-4 shadow-sm fw-semibold ms-2';
+                                saveBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
                                 showToast("Job saved successfully!", "success");
                             }
                         } catch (saveErr) {

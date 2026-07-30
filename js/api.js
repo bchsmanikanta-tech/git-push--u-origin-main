@@ -348,9 +348,42 @@ const LocalJobs = {
         return null;
     },
     remove(id) {
-        const jobs = this.getAll();
-        const filtered = jobs.filter(j => j.id !== id && j._id !== id);
-        this.saveAll(filtered);
+        const jobs = this.getAll().filter(j => j.id !== id && j._id !== id);
+        this.saveAll(jobs);
+    }
+};
+
+const LocalSavedJobs = {
+    getKey(email) {
+        return 'sjvf_saved_jobs_' + (email || 'guest').toLowerCase().trim();
+    },
+    get(email) {
+        try {
+            const raw = SafeStorage.getItem(this.getKey(email));
+            return raw ? JSON.parse(raw) : [];
+        } catch(e) {
+            return [];
+        }
+    },
+    saveAll(email, savedIds) {
+        try {
+            SafeStorage.setItem(this.getKey(email), JSON.stringify(savedIds));
+        } catch(e) {}
+    },
+    add(email, jobId) {
+        const list = this.get(email);
+        const strId = String(jobId);
+        if (!list.map(String).includes(strId)) {
+            list.push(jobId);
+            this.saveAll(email, list);
+        }
+        return list;
+    },
+    remove(email, jobId) {
+        const strId = String(jobId);
+        const list = this.get(email).filter(id => String(id) !== strId);
+        this.saveAll(email, list);
+        return list;
     }
 };
 
@@ -707,7 +740,28 @@ const API = {
 
     profile: {
         async getSeeker(email) {
-            return apiRequest(`/profile/seeker/${email}`);
+            const cleanEmail = (email || '').toLowerCase().trim();
+            let remoteRes = null;
+            try {
+                remoteRes = await apiRequest(`/profile/seeker/${cleanEmail}`);
+            } catch (err) {
+                console.warn('[API.profile.getSeeker] Fallback used:', err.message);
+            }
+
+            const localSaved = LocalSavedJobs.get(cleanEmail);
+            if (remoteRes && remoteRes.profile) {
+                const mergedSaved = Array.from(new Set([...(remoteRes.profile.savedJobs || []).map(String), ...localSaved.map(String)]));
+                remoteRes.profile.savedJobs = mergedSaved;
+                return remoteRes;
+            }
+
+            return {
+                success: true,
+                profile: {
+                    email: cleanEmail,
+                    savedJobs: localSaved
+                }
+            };
         },
         async updateSeeker(email, data) {
             return apiRequest(`/profile/seeker/${email}`, {
@@ -898,28 +952,88 @@ const API = {
 
     savedJobs: {
         async toggle(email, jobId) {
-            return apiRequest('/jobs/save-toggle', {
-                method: 'POST',
-                body: { email, jobId }
-            });
+            const cleanEmail = (email || '').toLowerCase().trim();
+            try {
+                const res = await apiRequest('/jobs/save-toggle', {
+                    method: 'POST',
+                    body: { email: cleanEmail, jobId }
+                });
+                if (res && Array.isArray(res.savedJobs)) {
+                    LocalSavedJobs.saveAll(cleanEmail, res.savedJobs);
+                }
+                return res;
+            } catch (err) {
+                console.warn('[API.savedJobs.toggle] Local fallback used:', err.message);
+                const current = LocalSavedJobs.get(cleanEmail);
+                if (current.map(String).includes(String(jobId))) {
+                    const list = LocalSavedJobs.remove(cleanEmail, jobId);
+                    return { success: true, message: 'Bookmark removed!', savedJobs: list };
+                } else {
+                    const list = LocalSavedJobs.add(cleanEmail, jobId);
+                    return { success: true, message: 'Job bookmarked!', savedJobs: list };
+                }
+            }
         },
         async get(email) {
-            return apiRequest(`/saved-jobs/${encodeURIComponent(email)}`);
+            return this.list(email);
         },
         async list(email) {
-            return apiRequest(`/saved-jobs/${encodeURIComponent(email)}`);
+            const cleanEmail = (email || '').toLowerCase().trim();
+            let remoteJobs = [];
+            try {
+                const res = await apiRequest(`/saved-jobs/${encodeURIComponent(cleanEmail)}`);
+                if (res && Array.isArray(res.jobs)) {
+                    remoteJobs = res.jobs;
+                }
+            } catch (err) {
+                console.warn('[API.savedJobs.list] Local fallback used:', err.message);
+            }
+
+            const localSavedIds = LocalSavedJobs.get(cleanEmail).map(String);
+            const allLocalJobs = LocalJobs.getAll();
+            const localSavedObjects = allLocalJobs.filter(j => localSavedIds.includes(String(j.id || j._id)));
+
+            const map = new Map();
+            [...localSavedObjects, ...remoteJobs].forEach(job => {
+                const key = job.id || job._id;
+                if (key && !map.has(key)) {
+                    map.set(key, job);
+                }
+            });
+            const mergedJobs = Array.from(map.values());
+
+            return {
+                success: true,
+                jobs: mergedJobs
+            };
         },
         async add(email, jobId) {
-            return apiRequest('/saved-jobs', {
-                method: 'POST',
-                body: { email, jobId }
-            });
+            const cleanEmail = (email || '').toLowerCase().trim();
+            LocalSavedJobs.add(cleanEmail, jobId);
+            try {
+                const res = await apiRequest('/saved-jobs', {
+                    method: 'POST',
+                    body: { email: cleanEmail, jobId }
+                });
+                return res || { success: true, message: 'Job bookmarked!' };
+            } catch (err) {
+                console.warn('[API.savedJobs.add] Local fallback used:', err.message);
+                return { success: true, message: 'Job bookmarked!' };
+            }
         },
         async remove(email, jobId) {
-            return apiRequest('/saved-jobs', {
-                method: 'DELETE',
-                body: { email, jobId }
-            });
+            const cleanEmail = (email || '').toLowerCase().trim();
+            LocalSavedJobs.remove(cleanEmail, jobId);
+            try {
+                const res = await apiRequest('/saved-jobs', {
+                    method: 'DELETE',
+                    body: { email: cleanEmail, jobId }
+                });
+                return res || { success: true, message: 'Bookmark removed!' };
+            } catch (err) {
+                console.warn('[API.savedJobs.remove] Local fallback used:', err.message);
+                return { success: true, message: 'Bookmark removed!' };
+            }
         }
     },
 
