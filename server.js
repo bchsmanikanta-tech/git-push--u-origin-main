@@ -21,7 +21,113 @@ connectDB().catch(() => null);
 const memoryDB = {
     seekers: {},
     companies: {},
-    jobs: [],
+    jobs: [
+        {
+            id: 'job_seed_1',
+            _id: 'job_seed_1',
+            title: 'Senior Full Stack Engineer',
+            companyName: 'TechCorp Solutions',
+            companyEmail: 'hr@techcorp.com',
+            location: 'Bangalore, India',
+            salary: '₹18 - ₹25 LPA',
+            type: 'Full Time',
+            experience: '3-5 Years',
+            skills: 'JavaScript, React, Node.js, MongoDB',
+            description: 'We are seeking an experienced Full Stack Engineer to lead frontend and backend web development projects.',
+            status: 'Active',
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: 'job_seed_2',
+            _id: 'job_seed_2',
+            title: 'Frontend UI/UX Architect',
+            companyName: 'InnovateX Labs',
+            companyEmail: 'careers@innovatex.com',
+            location: 'Remote',
+            salary: '₹15 - ₹22 LPA',
+            type: 'Remote',
+            experience: '2-4 Years',
+            skills: 'HTML5, CSS3, Bootstrap 5, Vue/React',
+            description: 'Join our dynamic creative team to design and build stunning, intuitive web application user interfaces.',
+            status: 'Active',
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: 'job_seed_3',
+            _id: 'job_seed_3',
+            title: 'Data Analyst & Insights Lead',
+            companyName: 'DataSphere Analytics',
+            companyEmail: 'jobs@datasphere.io',
+            location: 'Hyderabad, India',
+            salary: '₹12 - ₹18 LPA',
+            type: 'Hybrid',
+            experience: '1-3 Years',
+            skills: 'Python, SQL, Tableau, PowerBI',
+            description: 'Analyze data trends, build interactive dashboards, and deliver key business insights to cross-functional executive teams.',
+            status: 'Active',
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: 'job_seed_4',
+            _id: 'job_seed_4',
+            title: 'Java Cloud Backend Developer',
+            companyName: 'Apex Cloud Systems',
+            companyEmail: 'recruitment@apexcloud.com',
+            location: 'Pune, India',
+            salary: '₹14 - ₹20 LPA',
+            type: 'Full Time',
+            experience: '2-5 Years',
+            skills: 'Java, Spring Boot, Microservices, AWS',
+            description: 'Build high-throughput backend microservices, REST APIs, and scalable cloud deployment pipelines.',
+            status: 'Active',
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: 'job_seed_5',
+            _id: 'job_seed_5',
+            title: 'Mobile Application Developer',
+            companyName: 'AppWorks Studio',
+            companyEmail: 'hiring@appworks.com',
+            location: 'Mumbai, India',
+            salary: '₹10 - ₹16 LPA',
+            type: 'Full Time',
+            experience: '1-3 Years',
+            skills: 'React Native, Flutter, iOS, Android',
+            description: 'Develop next-generation mobile applications for iOS and Android platforms with smooth native UI features.',
+            status: 'Active',
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: 'job_seed_6',
+            _id: 'job_seed_6',
+            title: 'Cybersecurity Operations Engineer',
+            companyName: 'SecureNet Systems',
+            companyEmail: 'security@securenet.com',
+            location: 'Delhi NCR, India',
+            salary: '₹16 - ₹24 LPA',
+            type: 'Full Time',
+            experience: '3-6 Years',
+            skills: 'Network Security, SIEM, Penetration Testing, SOC',
+            description: 'Monitor cloud infrastructure, assess security vulnerabilities, and implement threat intelligence protocols.',
+            status: 'Active',
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: 'job_seed_7',
+            _id: 'job_seed_7',
+            title: 'AI / ML Solutions Specialist',
+            companyName: 'Brainwave AI Lab',
+            companyEmail: 'ai@brainwave.io',
+            location: 'Bangalore, India',
+            salary: '₹20 - ₹30 LPA',
+            type: 'Remote',
+            experience: '2-5 Years',
+            skills: 'Python, PyTorch, LLMs, NLP, Scikit-Learn',
+            description: 'Design and deploy state-of-the-art machine learning models and Generative AI applications for enterprise customers.',
+            status: 'Active',
+            createdAt: new Date().toISOString()
+        }
+    ],
     applications: [],
     interviews: [],
     settings: {
@@ -1118,23 +1224,48 @@ app.delete('/api/notifications/clear/:email', async (req, res) => {
 
 const fetchSavedJobsList = async (email) => {
     const cleanEmail = (email || '').toLowerCase().trim();
-    if (mongoose.connection.readyState !== 1) {
-        const seeker = memoryDB.seekers[cleanEmail];
-        if (!seeker || !seeker.savedJobs || seeker.savedJobs.length === 0) return [];
-        const savedSet = new Set(seeker.savedJobs.map(String));
-        return (memoryDB.jobs || []).filter(j => savedSet.has(String(j._id)) || savedSet.has(String(j.id)));
+    const memSeeker = memoryDB.seekers[cleanEmail];
+    let savedIds = [];
+
+    if (memSeeker && Array.isArray(memSeeker.savedJobs)) {
+        savedIds = [...memSeeker.savedJobs.map(String)];
     }
-    const seeker = await Jobseeker.findOne({ email: cleanEmail }).lean();
-    if (!seeker || !seeker.savedJobs || seeker.savedJobs.length === 0) return [];
-    
-    const savedIds = seeker.savedJobs.map(String);
-    const validObjectIds = savedIds.filter(id => mongoose.Types.ObjectId.isValid(id));
-    
-    const conditions = [{ id: { $in: savedIds } }];
-    if (validObjectIds.length > 0) {
-        conditions.push({ _id: { $in: validObjectIds } });
+
+    if (mongoose.connection.readyState === 1) {
+        try {
+            const seeker = await Jobseeker.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } }).lean();
+            if (seeker && Array.isArray(seeker.savedJobs)) {
+                savedIds = Array.from(new Set([...savedIds, ...seeker.savedJobs.map(String)]));
+            }
+        } catch (e) {}
     }
-    return await Job.find({ $or: conditions }).lean();
+
+    if (savedIds.length === 0) return [];
+
+    const savedSet = new Set(savedIds);
+    let memJobsMatch = (memoryDB.jobs || []).filter(j => savedSet.has(String(j._id)) || savedSet.has(String(j.id)));
+
+    let dbJobsMatch = [];
+    if (mongoose.connection.readyState === 1) {
+        try {
+            const validObjectIds = savedIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+            const conditions = [{ id: { $in: savedIds } }];
+            if (validObjectIds.length > 0) {
+                conditions.push({ _id: { $in: validObjectIds } });
+            }
+            dbJobsMatch = await Job.find({ $or: conditions }).lean();
+        } catch (e) {}
+    }
+
+    const map = new Map();
+    [...memJobsMatch, ...dbJobsMatch].forEach(j => {
+        if (j) {
+            const key = String(j.id || j._id || '');
+            if (key) map.set(key, j);
+        }
+    });
+
+    return Array.from(map.values());
 };
 
 app.get(['/api/saved-jobs/:email', '/api/jobs/saved/:email'], async (req, res) => {

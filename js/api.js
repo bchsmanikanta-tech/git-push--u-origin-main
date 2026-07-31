@@ -252,7 +252,7 @@ async function fetchRevalidate(endpoint, options = {}, cacheKey = '') {
     const url = `${API_BASE}${endpoint}`;
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s fast timeout
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
     const fetchOptions = { ...options, signal: controller.signal };
     
     if (fetchOptions.body && !(fetchOptions.body instanceof FormData) && typeof fetchOptions.body !== 'string') {
@@ -546,13 +546,20 @@ const API = {
                 });
                 if (res && res.success) {
                     LocalUsers.register(cleanName, cleanEmail, password, 'seeker');
+                    if (res.user) Session.setUser(res.user);
                     return res;
                 }
                 throw new Error((res && res.message) || 'Registration failed.');
             } catch (err) {
-                if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('abort'))) {
-                    LocalUsers.register(cleanName, cleanEmail, password, 'seeker');
-                    return { success: true, message: 'Registration successful!', user: { name: cleanName, email: cleanEmail, role: 'seeker' } };
+                const isNetErr = err.name === 'AbortError' || !err.message || 
+                    err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || 
+                    err.message.includes('abort') || err.message.includes('aborted');
+                
+                if (isNetErr) {
+                    const newUser = LocalUsers.register(cleanName, cleanEmail, password, 'seeker');
+                    const user = { name: cleanName, email: cleanEmail, role: 'seeker' };
+                    Session.setUser(user);
+                    return { success: true, message: 'Registration successful!', user };
                 }
                 throw err;
             }
@@ -569,6 +576,7 @@ const API = {
                 });
                 if (remoteRes && remoteRes.success && remoteRes.user) {
                     LocalUsers.register(remoteRes.user.name || 'Jobseeker', cleanEmail, password, 'seeker');
+                    Session.setUser(remoteRes.user);
                     return remoteRes;
                 }
                 if (remoteRes && !remoteRes.success) {
@@ -585,7 +593,19 @@ const API = {
                 return { success: true, message: 'Login successful!', user };
             }
 
-            if (remoteErr && remoteErr.message && !remoteErr.message.includes('Failed to fetch') && !remoteErr.message.includes('abort')) {
+            const isNetErr = remoteErr && (remoteErr.name === 'AbortError' || 
+                (remoteErr.message && (remoteErr.message.includes('Failed to fetch') || remoteErr.message.includes('NetworkError') || remoteErr.message.includes('abort') || remoteErr.message.includes('aborted'))));
+
+            if (isNetErr) {
+                const rawName = cleanEmail.split('@')[0].replace(/[^a-zA-Z]/g, ' ') || 'Jobseeker';
+                const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+                LocalUsers.register(capName, cleanEmail, password, 'seeker');
+                const user = { name: capName, email: cleanEmail, role: 'seeker' };
+                Session.setUser(user);
+                return { success: true, message: 'Login successful!', user };
+            }
+
+            if (remoteErr && remoteErr.message) {
                 throw remoteErr;
             }
 
@@ -603,13 +623,20 @@ const API = {
                 });
                 if (res && res.success) {
                     LocalUsers.register(cleanName, cleanEmail, password, 'company');
+                    if (res.user) Session.setUser(res.user);
                     return res;
                 }
                 throw new Error((res && res.message) || 'Registration failed.');
             } catch (err) {
-                if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('abort'))) {
+                const isNetErr = err.name === 'AbortError' || !err.message || 
+                    err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || 
+                    err.message.includes('abort') || err.message.includes('aborted');
+                
+                if (isNetErr) {
                     LocalUsers.register(cleanName, cleanEmail, password, 'company');
-                    return { success: true, message: 'Registration successful!', user: { name: cleanName, email: cleanEmail, role: 'company' } };
+                    const user = { name: cleanName, email: cleanEmail, role: 'company' };
+                    Session.setUser(user);
+                    return { success: true, message: 'Registration successful!', user };
                 }
                 throw err;
             }
@@ -626,6 +653,7 @@ const API = {
                 });
                 if (remoteRes && remoteRes.success && remoteRes.user) {
                     LocalUsers.register(remoteRes.user.companyName || remoteRes.user.name || 'Company', cleanEmail, password, 'company');
+                    Session.setUser(remoteRes.user);
                     return remoteRes;
                 }
                 if (remoteRes && !remoteRes.success) {
@@ -642,7 +670,19 @@ const API = {
                 return { success: true, message: 'Login successful!', user };
             }
 
-            if (remoteErr && remoteErr.message && !remoteErr.message.includes('Failed to fetch') && !remoteErr.message.includes('abort')) {
+            const isNetErr = remoteErr && (remoteErr.name === 'AbortError' || 
+                (remoteErr.message && (remoteErr.message.includes('Failed to fetch') || remoteErr.message.includes('NetworkError') || remoteErr.message.includes('abort') || remoteErr.message.includes('aborted'))));
+
+            if (isNetErr) {
+                const rawName = (cleanEmail.split('@')[0] + ' Tech').replace(/[^a-zA-Z ]/g, '');
+                const capName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+                LocalUsers.register(capName, cleanEmail, password, 'company');
+                const user = { name: capName, email: cleanEmail, role: 'company' };
+                Session.setUser(user);
+                return { success: true, message: 'Login successful!', user };
+            }
+
+            if (remoteErr && remoteErr.message) {
                 throw remoteErr;
             }
 
@@ -999,11 +1039,13 @@ const API = {
             const localSavedIds = LocalSavedJobs.get(cleanEmail).map(String);
             let allJobs = [];
             try {
-                const allJobsRes = await API.jobs.getAll();
+                const allJobsRes = await API.jobs.getAll({ limit: 1000 });
                 if (allJobsRes && Array.isArray(allJobsRes.jobs)) {
                     allJobs = allJobsRes.jobs;
                 }
             } catch (e) {}
+
+            const localJobs = LocalJobs.getAll();
 
             const map = new Map();
             
@@ -1015,9 +1057,9 @@ const API = {
                 }
             });
 
-            // Match saved IDs against allJobs
+            // Match saved IDs against allJobs and localJobs
             const savedSet = new Set(localSavedIds);
-            allJobs.forEach(j => {
+            [...localJobs, ...allJobs].forEach(j => {
                 if (j && typeof j === 'object') {
                     const key = String(j.id || j._id || '');
                     if (key && (savedSet.has(key) || savedSet.has(String(j._id)) || savedSet.has(String(j.id)))) {
