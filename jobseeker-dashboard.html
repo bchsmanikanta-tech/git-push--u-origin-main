@@ -135,9 +135,6 @@
                         <a href="#" class="menu-link" id="menu-recommended-jobs" onclick="if(window.switchView) window.switchView('recommended'); return false;">
                             <i class="bi bi-stars text-purple" style="color: #7c3aed;"></i> AI Recommended
                         </a>
-                        <a href="#" class="menu-link" id="menu-saved-jobs" onclick="if(window.switchView) window.switchView('saved'); return false;">
-                            <i class="bi bi-bookmark-star-fill text-warning"></i> Saved Bookmarks
-                        </a>
                         <a href="my-applications.html" class="menu-link">
                             <i class="bi bi-file-earmark-text"></i> Application History
                         </a>
@@ -235,15 +232,15 @@
                         </div>
                         
                         <div class="col-md-3">
-                            <a href="#" id="card-saved-jobs-trigger" onclick="if(window.switchView) window.switchView('saved'); return false;" class="text-decoration-none">
+                            <a href="my-applications.html" class="text-decoration-none">
                                 <div class="stat-card-gradient">
                                     <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <span class="text-secondary small fw-bold text-uppercase">Saved Jobs</span>
-                                        <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning">
-                                            <i class="bi bi-bookmark-star-fill fs-5"></i>
+                                        <span class="text-secondary small fw-bold text-uppercase">Selected</span>
+                                        <div class="p-2 rounded-circle bg-success bg-opacity-10 text-success">
+                                            <i class="bi bi-check-circle-fill fs-5"></i>
                                         </div>
                                     </div>
-                                    <h2 class="fw-bold mb-0 text-dark" id="stat-saved-count-overview">0</h2>
+                                    <h2 class="fw-bold mb-0 text-dark" id="stat-selected-count-overview">0</h2>
                                 </div>
                             </a>
                         </div>

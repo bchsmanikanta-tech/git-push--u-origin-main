@@ -244,44 +244,14 @@
                                             <i class="bi bi-currency-rupee text-muted"></i> Salary: <b>${job.salary}</b>
                                         </p>
                                     </div>
-                                    <div class="d-flex gap-2 mt-2">
-                                        <a href="job-details.html?id=${realJobId}" class="btn btn-premium btn-premium-primary flex-grow-1 py-2.5">
+                                    <div class="mt-2">
+                                        <a href="job-details.html?id=${realJobId}" class="btn btn-premium btn-premium-primary w-100 py-2.5">
                                             View Details
                                         </a>
-                                        <button type="button" class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-primary'} bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center" data-job-id="${realJobId}">
-                                            <i class="bi ${isSaved ? 'bi-check-circle-fill' : 'bi-bookmark-plus'} me-1.5"></i> ${isSaved ? 'Saved' : 'Save Job'}
-                                        </button>
                                     </div>
                                 </div>
                             </div>
                         `;
-                    });
-
-                    // Bind Bookmark Buttons with Instant 0ms UI Feedback
-                    container.querySelectorAll('.bookmark-btn').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-
-                            const jobId = String(btn.dataset.jobId);
-                            const isNowSaved = LocalSavedJobs.toggle(jobId);
-
-                            if (isNowSaved) {
-                                btn.className = 'btn btn-success text-white bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
-                                btn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
-                                showToast("Job bookmarked successfully!", "success");
-                            } else {
-                                btn.className = 'btn btn-outline-primary bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
-                                btn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
-                                showToast("Job removed from saved list!", "info");
-                            }
-
-                            const currentUser = Session.getUser();
-                            const userEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
-                            if (userEmail !== 'guest') {
-                                API.savedJobs.toggle(userEmail, jobId).catch(() => null);
-                            }
-                        });
                     });
 
                     // Render Pagination

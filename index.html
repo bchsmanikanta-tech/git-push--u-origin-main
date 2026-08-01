@@ -506,44 +506,16 @@
                                 ${j.skills ? `<div class="small text-secondary mb-3"><i class="bi bi-tools me-1 text-primary"></i>${j.skills.substring(0, 45)}...</div>` : ''}
                             </div>
                             
-                            <!-- View Details & Save Buttons -->
-                            <div class="d-flex gap-2 mt-3">
-                                <a href="job-details.html?id=${realJobId}" class="btn btn-outline-primary flex-grow-1 rounded-pill fw-semibold">
+                            <!-- View Details Button -->
+                            <div class="mt-3">
+                                <a href="job-details.html?id=${realJobId}" class="btn btn-outline-primary w-100 rounded-pill fw-semibold">
                                     <i class="bi bi-eye-fill me-1"></i> View Details
                                 </a>
-                                <button type="button" class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-warning'} rounded-pill fw-semibold px-3 home-save-btn" data-job-id="${realJobId}" title="Save Job">
-                                    <i class="bi ${isSaved ? 'bi-check-circle-fill' : 'bi-star'} me-1"></i> ${isSaved ? 'Saved' : 'Save'}
-                                </button>
                             </div>
                         </div>
                     </div>
                 `;
             }).join('');
-
-            container.querySelectorAll('.home-save-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const jobId = String(btn.dataset.jobId);
-                    const isNowSaved = LocalSavedJobs.toggle(jobId);
-
-                    if (isNowSaved) {
-                        btn.className = 'btn btn-success text-white rounded-pill fw-semibold px-3 home-save-btn';
-                        btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Saved';
-                        showToast("Job bookmarked successfully!", "success");
-                    } else {
-                        btn.className = 'btn btn-outline-warning rounded-pill fw-semibold px-3 home-save-btn';
-                        btn.innerHTML = '<i class="bi bi-star me-1"></i> Save';
-                        showToast("Job removed from saved list!", "info");
-                    }
-
-                    const activeUser = Session.getUser();
-                    const activeEmail = (activeUser && activeUser.email) ? activeUser.email : 'guest';
-                    if (activeEmail !== 'guest') {
-                        API.savedJobs.toggle(activeEmail, jobId).catch(() => null);
-                    }
-                });
-            });
         }
 
         function handleSearch(e) {
