@@ -161,9 +161,8 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
-            // Auth check
-            const user = Session.checkAuth('seeker');
-            if (!user) return;
+            const user = Session.getUser();
+            const userEmail = (user && user.email) ? user.email : 'guest';
 
             // Get job ID from URL query parameters
             const urlParams = new URLSearchParams(window.location.search);
@@ -182,13 +181,13 @@
 
                 // Fetch seeker profile, company profile, and applications in parallel
                 const [seekerData, compProfileData, appsData] = await Promise.all([
-                    API.profile.getSeeker(user.email).catch(() => null),
+                    user ? API.profile.getSeeker(user.email).catch(() => null) : Promise.resolve(null),
                     API.profile.getCompany(job.companyEmail).catch(() => null),
-                    API.applications.getForSeeker(user.email).catch(() => ({ applications: [] }))
+                    user ? API.applications.getForSeeker(user.email).catch(() => ({ applications: [] })) : Promise.resolve({ applications: [] })
                 ]);
 
                 const alreadyApplied = appsData && appsData.applications 
-                    ? appsData.applications.some(app => app.jobId === jobId)
+                    ? appsData.applications.some(app => String(app.jobId) === String(jobId))
                     : false;
 
                 // Populate fields
@@ -485,10 +484,13 @@
 
                 // Render Action Buttons (Apply Now & Save Job)
                 const btnWrapper = document.getElementById('apply-btn-wrapper');
-                let isSaved = false;
-                if (seekerData && seekerData.profile && seekerData.profile.savedJobs) {
-                    isSaved = (seekerData.profile.savedJobs || []).map(String).includes(String(jobId));
-                }
+                
+                const localSaved = LocalSavedJobs.get(userEmail).map(String);
+                const remoteSaved = (seekerData && seekerData.profile && seekerData.profile.savedJobs) 
+                    ? seekerData.profile.savedJobs.map(item => typeof item === 'object' ? String(item.id || item._id) : String(item)) 
+                    : [];
+                const savedIdsList = Array.from(new Set([...localSaved, ...remoteSaved])).filter(Boolean);
+                let isSaved = savedIdsList.includes(String(jobId));
 
                 const saveBtnHtml = `
                     <button id="save-job-btn" class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-primary'} py-3 px-4 shadow-sm fw-semibold ms-2">
@@ -522,20 +524,20 @@
                 if (saveBtn) {
                     saveBtn.addEventListener('click', async () => {
                         const currentUser = Session.getUser();
-                        const userEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
+                        const activeEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
                         try {
                             if (isSaved) {
                                 isSaved = false;
                                 saveBtn.className = 'btn btn-outline-primary py-3 px-4 shadow-sm fw-semibold ms-2';
                                 saveBtn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
                                 showToast("Job removed from saved list!", "info");
-                                await API.savedJobs.remove(userEmail, jobId).catch(e => console.warn(e));
+                                await API.savedJobs.remove(activeEmail, jobId).catch(e => console.warn(e));
                             } else {
                                 isSaved = true;
                                 saveBtn.className = 'btn btn-success text-white py-3 px-4 shadow-sm fw-semibold ms-2';
                                 saveBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
                                 showToast("Job bookmarked successfully!", "success");
-                                await API.savedJobs.add(userEmail, jobId).catch(e => console.warn(e));
+                                await API.savedJobs.add(activeEmail, jobId).catch(e => console.warn(e));
                             }
                         } catch (saveErr) {
                             console.error("Failed to toggle save job:", saveErr);

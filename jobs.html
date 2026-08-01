@@ -139,10 +139,13 @@
                 pagContainer.innerHTML = '';
 
                 try {
+                    const activeUser = Session.getUser();
+                    const activeEmail = (activeUser && activeUser.email) ? activeUser.email : 'guest';
+
                     // Load profile to get savedJobs if user is logged in
-                    if (user && user.email && !seekerProfile) {
+                    if (activeUser && activeUser.email && !seekerProfile) {
                         try {
-                            const profileRes = await API.profile.getSeeker(user.email);
+                            const profileRes = await API.profile.getSeeker(activeUser.email);
                             if (profileRes && profileRes.profile) {
                                 seekerProfile = profileRes.profile;
                             }
@@ -151,7 +154,11 @@
                         }
                     }
                     if (!seekerProfile) {
-                        seekerProfile = { savedJobs: [] };
+                        seekerProfile = { savedJobs: LocalSavedJobs.get(activeEmail) };
+                    } else {
+                        const localSaved = LocalSavedJobs.get(activeEmail);
+                        const merged = Array.from(new Set([...(seekerProfile.savedJobs || []).map(String), ...localSaved.map(String)])).filter(Boolean);
+                        seekerProfile.savedJobs = merged;
                     }
 
                     // Prepare query payload
@@ -183,6 +190,12 @@
                         return;
                     }
 
+                    const savedIdsList = (seekerProfile.savedJobs || []).map(item => {
+                        if (!item) return '';
+                        if (typeof item === 'object') return String(item.id || item._id || '');
+                        return String(item);
+                    }).filter(Boolean);
+
                     jobs.forEach((job, index) => {
                         let iconClass = 'bi-laptop';
                         const title = job.title.toLowerCase();
@@ -202,8 +215,8 @@
                         if (job.type === 'Part Time') badgeTypeClass = 'bg-secondary';
                         if (job.type === 'Internship') badgeTypeClass = 'bg-dark';
 
-                        const realJobId = job.id || job._id;
-                        const isSaved = (seekerProfile.savedJobs || []).map(String).includes(String(realJobId));
+                        const realJobId = String(job.id || job._id || '');
+                        const isSaved = savedIdsList.includes(realJobId);
 
                         container.innerHTML += `
                             <div class="col-md-6 col-lg-4">
@@ -246,17 +259,18 @@
 
                             const currentUser = Session.getUser();
                             const userEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
-                            const jobId = btn.dataset.jobId;
+                            const jobId = String(btn.dataset.jobId);
 
                             if (!seekerProfile) seekerProfile = { savedJobs: [] };
                             if (!seekerProfile.savedJobs) seekerProfile.savedJobs = [];
 
-                            const isSavedNow = seekerProfile.savedJobs.map(String).includes(String(jobId));
+                            const currentSaved = (seekerProfile.savedJobs || []).map(String);
+                            const isSavedNow = currentSaved.includes(jobId);
 
                             try {
                                 if (isSavedNow) {
                                     // Remove bookmark instantly in UI
-                                    seekerProfile.savedJobs = seekerProfile.savedJobs.filter(id => String(id) !== String(jobId));
+                                    seekerProfile.savedJobs = currentSaved.filter(id => String(id) !== jobId);
                                     btn.className = 'btn btn-outline-primary bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
                                     btn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
                                     showToast("Job removed from saved list!", "info");

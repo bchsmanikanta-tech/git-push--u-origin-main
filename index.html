@@ -482,36 +482,70 @@
                 return;
             }
 
-            container.innerHTML = jobs.slice(0, 6).map(j => `
-                <div class="col-md-4">
-                    <!-- 6. Job Listing Card -->
-                    <div class="job-card">
-                        <div>
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-1 font-monospace" style="font-size:11px;">${j.type || 'Full Time'}</span>
-                                <span class="fw-bold text-success" style="font-size:13px;">${j.salary || 'Competitive'}</span>
+            const currentUser = Session.getUser();
+            const userEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
+            const savedList = LocalSavedJobs.get(userEmail).map(String);
+
+            container.innerHTML = jobs.slice(0, 6).map(j => {
+                const realJobId = String(j.id || j._id || '');
+                const isSaved = savedList.includes(realJobId);
+
+                return `
+                    <div class="col-md-4">
+                        <!-- 6. Job Listing Card -->
+                        <div class="job-card">
+                            <div>
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-1 font-monospace" style="font-size:11px;">${j.type || 'Full Time'}</span>
+                                    <span class="fw-bold text-success" style="font-size:13px;">${j.salary || 'Competitive'}</span>
+                                </div>
+                                <!-- Job Title -->
+                                <h5 class="fw-bold text-dark mb-1">${j.title}</h5>
+                                <!-- Company Name -->
+                                <div class="text-secondary fw-semibold small mb-2"><i class="bi bi-building me-1"></i>${j.companyName || 'Company'}</div>
+                                <!-- Location -->
+                                <div class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i>${j.location || 'India'}</div>
+                                ${j.skills ? `<div class="small text-secondary mb-3"><i class="bi bi-tools me-1 text-primary"></i>${j.skills.substring(0, 45)}...</div>` : ''}
                             </div>
-                            <!-- Job Title -->
-                            <h5 class="fw-bold text-dark mb-1">${j.title}</h5>
-                            <!-- Company Name -->
-                            <div class="text-secondary fw-semibold small mb-2"><i class="bi bi-building me-1"></i>${j.companyName || 'Company'}</div>
-                            <!-- Location -->
-                            <div class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i>${j.location || 'India'}</div>
-                            ${j.skills ? `<div class="small text-secondary mb-3"><i class="bi bi-tools me-1 text-primary"></i>${j.skills.substring(0, 45)}...</div>` : ''}
-                        </div>
-                        
-                        <!-- View Details & Save Buttons -->
-                        <div class="d-flex gap-2 mt-3">
-                            <a href="job-details.html?id=${j.id||j._id}" class="btn btn-outline-primary flex-grow-1 rounded-pill fw-semibold">
-                                <i class="bi bi-eye-fill me-1"></i> View Details
-                            </a>
-                            <a href="job-details.html?id=${j.id||j._id}" class="btn btn-outline-warning rounded-pill fw-semibold px-3" title="Save Job">
-                                <i class="bi bi-star me-1"></i> Save
-                            </a>
+                            
+                            <!-- View Details & Save Buttons -->
+                            <div class="d-flex gap-2 mt-3">
+                                <a href="job-details.html?id=${realJobId}" class="btn btn-outline-primary flex-grow-1 rounded-pill fw-semibold">
+                                    <i class="bi bi-eye-fill me-1"></i> View Details
+                                </a>
+                                <button class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-warning'} rounded-pill fw-semibold px-3 home-save-btn" data-job-id="${realJobId}" title="Save Job">
+                                    <i class="bi ${isSaved ? 'bi-check-circle-fill' : 'bi-star'} me-1"></i> ${isSaved ? 'Saved' : 'Save'}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
+
+            container.querySelectorAll('.home-save-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const activeUser = Session.getUser();
+                    const activeEmail = (activeUser && activeUser.email) ? activeUser.email : 'guest';
+                    const jobId = String(btn.dataset.jobId);
+
+                    const currentSaved = LocalSavedJobs.get(activeEmail).map(String);
+                    const isSavedNow = currentSaved.includes(jobId);
+
+                    if (isSavedNow) {
+                        btn.className = 'btn btn-outline-warning rounded-pill fw-semibold px-3 home-save-btn';
+                        btn.innerHTML = '<i class="bi bi-star me-1"></i> Save';
+                        showToast("Job removed from saved list!", "info");
+                        await API.savedJobs.remove(activeEmail, jobId).catch(err => console.warn(err));
+                    } else {
+                        btn.className = 'btn btn-success text-white rounded-pill fw-semibold px-3 home-save-btn';
+                        btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Saved';
+                        showToast("Job bookmarked successfully!", "success");
+                        await API.savedJobs.add(activeEmail, jobId).catch(err => console.warn(err));
+                    }
+                });
+            });
         }
 
         function handleSearch(e) {
