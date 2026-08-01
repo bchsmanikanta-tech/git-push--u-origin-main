@@ -589,7 +589,7 @@
                             if (card) card.remove();
                             showToast("Bookmark removed!", "info");
                             try {
-                                LocalSavedJobs.remove(seekerEmail, jobId);
+                                LocalSavedJobs.remove(jobId);
                                 await API.savedJobs.remove(seekerEmail, jobId);
                                 loadSavedJobs();
                             } catch (err) {

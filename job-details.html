@@ -485,12 +485,7 @@
                 // Render Action Buttons (Apply Now & Save Job)
                 const btnWrapper = document.getElementById('apply-btn-wrapper');
                 
-                const localSaved = LocalSavedJobs.get(userEmail).map(String);
-                const remoteSaved = (seekerData && seekerData.profile && seekerData.profile.savedJobs) 
-                    ? seekerData.profile.savedJobs.map(item => typeof item === 'object' ? String(item.id || item._id) : String(item)) 
-                    : [];
-                const savedIdsList = Array.from(new Set([...localSaved, ...remoteSaved])).filter(Boolean);
-                let isSaved = savedIdsList.includes(String(jobId));
+                const isSaved = LocalSavedJobs.isSaved(String(jobId));
 
                 const saveBtnHtml = `
                     <button type="button" id="save-job-btn" class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-primary'} py-3 px-4 shadow-sm fw-semibold ms-2">
@@ -522,26 +517,22 @@
                 // Bind Save Job click event with Instant 0ms UI Feedback
                 const saveBtn = document.getElementById('save-job-btn');
                 if (saveBtn) {
-                    saveBtn.addEventListener('click', async () => {
+                    saveBtn.addEventListener('click', () => {
+                        const isNowSaved = LocalSavedJobs.toggle(String(jobId));
+                        if (isNowSaved) {
+                            saveBtn.className = 'btn btn-success text-white py-3 px-4 shadow-sm fw-semibold ms-2';
+                            saveBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
+                            showToast("Job bookmarked successfully!", "success");
+                        } else {
+                            saveBtn.className = 'btn btn-outline-primary py-3 px-4 shadow-sm fw-semibold ms-2';
+                            saveBtn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
+                            showToast("Job removed from saved list!", "info");
+                        }
+
                         const currentUser = Session.getUser();
                         const activeEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
-                        try {
-                            if (isSaved) {
-                                isSaved = false;
-                                saveBtn.className = 'btn btn-outline-primary py-3 px-4 shadow-sm fw-semibold ms-2';
-                                saveBtn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
-                                showToast("Job removed from saved list!", "info");
-                                await API.savedJobs.remove(activeEmail, jobId).catch(e => console.warn(e));
-                            } else {
-                                isSaved = true;
-                                saveBtn.className = 'btn btn-success text-white py-3 px-4 shadow-sm fw-semibold ms-2';
-                                saveBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
-                                showToast("Job bookmarked successfully!", "success");
-                                await API.savedJobs.add(activeEmail, jobId).catch(e => console.warn(e));
-                            }
-                        } catch (saveErr) {
-                            console.error("Failed to toggle save job:", saveErr);
-                            showToast("Failed to save job", "error");
+                        if (activeEmail !== 'guest') {
+                            API.savedJobs.toggle(activeEmail, String(jobId)).catch(() => null);
                         }
                     });
                 }

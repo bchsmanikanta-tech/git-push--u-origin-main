@@ -372,72 +372,63 @@ const LocalJobs = {
 };
 
 const LocalSavedJobs = {
-    getKey(email) {
-        return 'sjvf_saved_jobs_' + (email || 'guest').toLowerCase().trim();
-    },
-    get(email) {
+    KEY: 'sjvf_saved_jobs_v2',
+    get() {
         try {
-            const cleanEmail = (email || 'guest').toLowerCase().trim();
-            const raw = SafeStorage.getItem(this.getKey(cleanEmail));
-            let parsed = raw ? JSON.parse(raw) : [];
-            parsed = Array.isArray(parsed) ? parsed.map(item => typeof item === 'object' ? String(item.id || item._id || '') : String(item)).filter(Boolean) : [];
-            
-            // Auto-merge guest bookmarks so saved jobs created as guest are never lost after login
-            if (cleanEmail !== 'guest') {
-                try {
-                    const guestRaw = SafeStorage.getItem(this.getKey('guest'));
-                    const guestParsed = guestRaw ? JSON.parse(guestRaw) : [];
-                    const guestList = Array.isArray(guestParsed) ? guestParsed.map(item => typeof item === 'object' ? String(item.id || item._id || '') : String(item)).filter(Boolean) : [];
-                    if (guestList.length > 0) {
-                        const mergedSet = new Set([...parsed, ...guestList]);
-                        parsed = Array.from(mergedSet);
-                        this.saveAll(cleanEmail, parsed);
-                    }
-                } catch(e) {}
-            }
-            return parsed;
+            const raw = SafeStorage.getItem(this.KEY);
+            const list = raw ? JSON.parse(raw) : [];
+            return Array.isArray(list) ? list.map(item => typeof item === 'object' ? String(item.id || item._id || '') : String(item)).filter(Boolean) : [];
         } catch(e) {
             return [];
         }
     },
-    saveAll(email, savedIds) {
+    saveAll(list) {
         try {
-            const cleanEmail = (email || 'guest').toLowerCase().trim();
-            const cleanList = Array.from(new Set((savedIds || []).map(item => {
+            const clean = Array.from(new Set((list || []).map(item => {
                 if (!item) return '';
                 if (typeof item === 'object') return String(item.id || item._id || item);
                 return String(item);
             }).filter(Boolean)));
-            SafeStorage.setItem(this.getKey(cleanEmail), JSON.stringify(cleanList));
-        } catch(e) {}
+            SafeStorage.setItem(this.KEY, JSON.stringify(clean));
+            return clean;
+        } catch(e) {
+            return [];
+        }
     },
-    add(email, jobId) {
-        const cleanEmail = (email || 'guest').toLowerCase().trim();
-        const strId = String(jobId);
-        const list = this.get(cleanEmail);
+    isSaved(id) {
+        if (!id) return false;
+        return this.get().includes(String(id));
+    },
+    toggle(id) {
+        if (!id) return false;
+        const strId = String(id);
+        const list = this.get();
+        const idx = list.indexOf(strId);
+        let nowSaved = false;
+        if (idx !== -1) {
+            list.splice(idx, 1);
+            nowSaved = false;
+        } else {
+            list.push(strId);
+            nowSaved = true;
+        }
+        this.saveAll(list);
+        return nowSaved;
+    },
+    add(id) {
+        if (!id) return;
+        const strId = String(id);
+        const list = this.get();
         if (!list.includes(strId)) {
             list.push(strId);
-            this.saveAll(cleanEmail, list);
+            this.saveAll(list);
         }
-        if (cleanEmail !== 'guest') {
-            const guestList = this.get('guest');
-            if (!guestList.includes(strId)) {
-                guestList.push(strId);
-                this.saveAll('guest', guestList);
-            }
-        }
-        return list;
     },
-    remove(email, jobId) {
-        const cleanEmail = (email || 'guest').toLowerCase().trim();
-        const strId = String(jobId);
-        const list = this.get(cleanEmail).filter(id => String(id) !== strId);
-        this.saveAll(cleanEmail, list);
-        if (cleanEmail !== 'guest') {
-            const guestList = this.get('guest').filter(id => String(id) !== strId);
-            this.saveAll('guest', guestList);
-        }
-        return list;
+    remove(id) {
+        if (!id) return;
+        const strId = String(id);
+        const list = this.get().filter(i => i !== strId);
+        this.saveAll(list);
     }
 };
 
@@ -1058,61 +1049,35 @@ const API = {
 
     savedJobs: {
         async toggle(email, jobId) {
-            const cleanEmail = (email || 'guest').toLowerCase().trim();
             const strId = String(jobId);
-            try {
-                const res = await apiRequest('/jobs/save-toggle', {
-                    method: 'POST',
-                    body: { email: cleanEmail, jobId: strId }
-                });
-                if (res && Array.isArray(res.savedJobs)) {
-                    LocalSavedJobs.saveAll(cleanEmail, res.savedJobs);
-                } else if (res && res.saved !== undefined) {
-                    if (res.saved) LocalSavedJobs.add(cleanEmail, strId);
-                    else LocalSavedJobs.remove(cleanEmail, strId);
-                }
-                return res;
-            } catch (err) {
-                console.warn('[API.savedJobs.toggle] Local fallback used:', err.message);
-                const current = LocalSavedJobs.get(cleanEmail);
-                if (current.map(String).includes(strId)) {
-                    const list = LocalSavedJobs.remove(cleanEmail, strId);
-                    return { success: true, message: 'Bookmark removed!', savedJobs: list };
-                } else {
-                    const list = LocalSavedJobs.add(cleanEmail, strId);
-                    return { success: true, message: 'Job bookmarked!', savedJobs: list };
-                }
+            const isNowSaved = LocalSavedJobs.toggle(strId);
+            const cleanEmail = (email || 'guest').toLowerCase().trim();
+            if (cleanEmail !== 'guest') {
+                const method = isNowSaved ? 'POST' : 'DELETE';
+                apiRequest('/saved-jobs', { method, body: { email: cleanEmail, jobId: strId } }).catch(() => null);
             }
+            return { success: true, saved: isNowSaved };
         },
         async get(email) {
             return this.list(email);
         },
         async list(email) {
             const cleanEmail = (email || 'guest').toLowerCase().trim();
+            const localSavedIds = LocalSavedJobs.get();
             let remoteJobs = [];
-            try {
-                const res = await apiRequest(`/saved-jobs/${encodeURIComponent(cleanEmail)}`);
-                if (res && Array.isArray(res.jobs)) {
-                    remoteJobs = res.jobs;
-                }
-            } catch (err) {
-                console.warn('[API.savedJobs.list] Remote fetch fallback used:', err.message);
+            if (cleanEmail !== 'guest') {
+                try {
+                    const res = await apiRequest(`/saved-jobs/${encodeURIComponent(cleanEmail)}`);
+                    if (res && Array.isArray(res.jobs)) {
+                        remoteJobs = res.jobs;
+                        remoteJobs.forEach(j => {
+                            if (j) LocalSavedJobs.add(j.id || j._id || j);
+                        });
+                    }
+                } catch (err) {}
             }
 
-            const localSavedIds = LocalSavedJobs.get(cleanEmail).map(String);
-            
-            // Collect all saved IDs from local and remote
-            const allSavedIdsSet = new Set(localSavedIds);
-            remoteJobs.forEach(j => {
-                if (j && typeof j === 'object') {
-                    const key = String(j.id || j._id || '');
-                    if (key) allSavedIdsSet.add(key);
-                } else if (j) {
-                    allSavedIdsSet.add(String(j));
-                }
-            });
-            const allSavedIds = Array.from(allSavedIdsSet).filter(Boolean);
-            LocalSavedJobs.saveAll(cleanEmail, allSavedIds);
+            const allSavedSet = new Set([...localSavedIds, ...LocalSavedJobs.get()]);
 
             let allJobs = [];
             try {
@@ -1123,70 +1088,40 @@ const API = {
             } catch (e) {}
 
             const localJobs = LocalJobs.getAll();
+            const pool = [...localJobs, ...allJobs, ...remoteJobs];
 
             const map = new Map();
-            
-            // Add remoteJobs if valid objects
-            remoteJobs.forEach(j => {
-                if (j && typeof j === 'object' && (j.id || j._id)) {
-                    const key = String(j.id || j._id);
-                    map.set(key, j);
-                }
-            });
-
-            // Match saved IDs against allJobs and localJobs
-            const savedSet = new Set(allSavedIds);
-            [...localJobs, ...allJobs].forEach(j => {
+            pool.forEach(j => {
                 if (j && typeof j === 'object') {
                     const key = String(j.id || j._id || '');
-                    if (key && (savedSet.has(key) || savedSet.has(String(j._id)) || savedSet.has(String(j.id)))) {
-                        map.set(key, j);
+                    if (key && allSavedSet.has(key)) {
+                        map.set(key, { ...j, id: key, _id: key });
                     }
                 }
             });
 
-            const mergedJobs = Array.from(map.values()).filter(j => j && typeof j === 'object' && (j.id || j._id));
-
             return {
                 success: true,
-                jobs: mergedJobs
+                jobs: Array.from(map.values())
             };
         },
         async add(email, jobId) {
-            const cleanEmail = (email || 'guest').toLowerCase().trim();
             const strId = String(jobId);
-            LocalSavedJobs.add(cleanEmail, strId);
-            try {
-                const res = await apiRequest('/saved-jobs', {
-                    method: 'POST',
-                    body: { email: cleanEmail, jobId: strId }
-                });
-                if (res && Array.isArray(res.savedJobs)) {
-                    LocalSavedJobs.saveAll(cleanEmail, res.savedJobs);
-                }
-                return res || { success: true, message: 'Job bookmarked!' };
-            } catch (err) {
-                console.warn('[API.savedJobs.add] Local fallback used:', err.message);
-                return { success: true, message: 'Job bookmarked!' };
+            LocalSavedJobs.add(strId);
+            const cleanEmail = (email || 'guest').toLowerCase().trim();
+            if (cleanEmail !== 'guest') {
+                apiRequest('/saved-jobs', { method: 'POST', body: { email: cleanEmail, jobId: strId } }).catch(() => null);
             }
+            return { success: true, message: 'Job bookmarked!' };
         },
         async remove(email, jobId) {
-            const cleanEmail = (email || 'guest').toLowerCase().trim();
             const strId = String(jobId);
-            LocalSavedJobs.remove(cleanEmail, strId);
-            try {
-                const res = await apiRequest('/saved-jobs', {
-                    method: 'DELETE',
-                    body: { email: cleanEmail, jobId: strId }
-                });
-                if (res && Array.isArray(res.savedJobs)) {
-                    LocalSavedJobs.saveAll(cleanEmail, res.savedJobs);
-                }
-                return res || { success: true, message: 'Bookmark removed!' };
-            } catch (err) {
-                console.warn('[API.savedJobs.remove] Local fallback used:', err.message);
-                return { success: true, message: 'Bookmark removed!' };
+            LocalSavedJobs.remove(strId);
+            const cleanEmail = (email || 'guest').toLowerCase().trim();
+            if (cleanEmail !== 'guest') {
+                apiRequest('/saved-jobs', { method: 'DELETE', body: { email: cleanEmail, jobId: strId } }).catch(() => null);
             }
+            return { success: true, message: 'Bookmark removed!' };
         }
     },
 

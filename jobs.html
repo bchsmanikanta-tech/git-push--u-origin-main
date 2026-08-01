@@ -222,7 +222,7 @@
                         if (job.type === 'Internship') badgeTypeClass = 'bg-dark';
 
                         const realJobId = String(job.id || job._id || '');
-                        const isSaved = savedIdsList.includes(realJobId);
+                        const isSaved = LocalSavedJobs.isSaved(realJobId);
 
                         container.innerHTML += `
                             <div class="col-md-6 col-lg-4">
@@ -259,46 +259,27 @@
 
                     // Bind Bookmark Buttons with Instant 0ms UI Feedback
                     container.querySelectorAll('.bookmark-btn').forEach(btn => {
-                        btn.addEventListener('click', async (e) => {
+                        btn.addEventListener('click', (e) => {
                             e.preventDefault();
                             e.stopPropagation();
 
+                            const jobId = String(btn.dataset.jobId);
+                            const isNowSaved = LocalSavedJobs.toggle(jobId);
+
+                            if (isNowSaved) {
+                                btn.className = 'btn btn-success text-white bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
+                                btn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
+                                showToast("Job bookmarked successfully!", "success");
+                            } else {
+                                btn.className = 'btn btn-outline-primary bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
+                                btn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
+                                showToast("Job removed from saved list!", "info");
+                            }
+
                             const currentUser = Session.getUser();
                             const userEmail = (currentUser && currentUser.email) ? currentUser.email : 'guest';
-                            const jobId = String(btn.dataset.jobId);
-
-                            if (!seekerProfile) seekerProfile = { savedJobs: [] };
-                            seekerProfile.savedJobs = extractJobIds(seekerProfile.savedJobs);
-
-                            const currentLocal = LocalSavedJobs.get(userEmail).map(String);
-                            const currentSavedSet = new Set([...seekerProfile.savedJobs, ...currentLocal]);
-                            const isSavedNow = currentSavedSet.has(jobId);
-
-                            try {
-                                if (isSavedNow) {
-                                    // Remove bookmark
-                                    seekerProfile.savedJobs = seekerProfile.savedJobs.filter(id => id !== jobId);
-                                    LocalSavedJobs.remove(userEmail, jobId);
-
-                                    btn.className = 'btn btn-outline-primary bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
-                                    btn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
-                                    showToast("Job removed from saved list!", "info");
-
-                                    await API.savedJobs.remove(userEmail, jobId).catch(err => console.warn('SavedJobs remove notice:', err));
-                                } else {
-                                    // Add bookmark
-                                    seekerProfile.savedJobs.push(jobId);
-                                    LocalSavedJobs.add(userEmail, jobId);
-
-                                    btn.className = 'btn btn-success text-white bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
-                                    btn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
-                                    showToast("Job bookmarked successfully!", "success");
-
-                                    await API.savedJobs.add(userEmail, jobId).catch(err => console.warn('SavedJobs add notice:', err));
-                                }
-                            } catch (bookmarkErr) {
-                                console.error("Failed to update bookmark:", bookmarkErr);
-                                showToast("Failed to update bookmark", "error");
+                            if (userEmail !== 'guest') {
+                                API.savedJobs.toggle(userEmail, jobId).catch(() => null);
                             }
                         });
                     });
