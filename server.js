@@ -8,6 +8,8 @@ const multer     = require('multer');
 const helmet     = require('helmet');
 const morgan     = require('morgan');
 const rateLimit  = require('express-rate-limit');
+const bcrypt     = require('bcryptjs');
+const jwt        = require('jsonwebtoken');
 
 const connectDB  = require('./db/connection');
 const { Jobseeker, Company, Job, Application, Admin, Notification, Message, Interview, CompanyReview, AuditLog, SystemSettings } = require('./db/models');
@@ -130,12 +132,90 @@ const memoryDB = {
     ],
     applications: [],
     interviews: [],
+    smartDoors: [],
     settings: {
         maintenanceMode: false,
         autoApproveJobs: true,
         allowNewRegistrations: true,
         emailNotifications: true
     }
+};
+
+const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || 'smart-job-admin-dev-secret';
+const PASSWORD_SALT_ROUNDS = 10;
+
+const isHashedPassword = (value = '') => typeof value === 'string' && /^\$2[aby]\$\d{2}\$/.test(value);
+const normalizeRole = (role = '') => String(role).trim().toLowerCase();
+const titleCase = (value = '') => {
+    const text = String(value || '').trim();
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+};
+const toDisplayStatus = (status = '') => {
+    const normalized = String(status || '').trim().toLowerCase();
+    if (!normalized) return 'Active';
+    if (normalized === 'banned' || normalized === 'blocked') return 'Blocked';
+    if (normalized === 'suspended') return 'Suspended';
+    return titleCase(normalized);
+};
+const toStoredStatus = (status = '') => {
+    const normalized = String(status || '').trim().toLowerCase();
+    if (!normalized) return 'active';
+    if (normalized === 'blocked') return 'banned';
+    return normalized;
+};
+const buildUserKey = (role, email) => `${normalizeRole(role)}:${String(email || '').toLowerCase().trim()}`;
+const parseUserKey = (rawKey = '') => {
+    const decoded = decodeURIComponent(String(rawKey || ''));
+    const separatorIndex = decoded.indexOf(':');
+    if (separatorIndex === -1) return { role: '', email: '' };
+    return {
+        role: normalizeRole(decoded.slice(0, separatorIndex)),
+        email: decoded.slice(separatorIndex + 1).toLowerCase().trim()
+    };
+};
+const parseSalaryNumber = (salary = '') => {
+    const numbers = String(salary || '').match(/\d+/g) || [];
+    return numbers.length ? Number(numbers[0]) : 0;
+};
+const formatSalaryFromInput = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 'Negotiable';
+    if (/[A-Za-z₹$€£]/.test(raw)) return raw;
+    return `₹${raw}`;
+};
+const hashPassword = async (password) => bcrypt.hash(String(password), PASSWORD_SALT_ROUNDS);
+const comparePassword = async (plainPassword, storedPassword) => {
+    if (!storedPassword) return false;
+    if (isHashedPassword(storedPassword)) {
+        return bcrypt.compare(String(plainPassword), storedPassword);
+    }
+    return String(plainPassword) === String(storedPassword);
+};
+const getJwtToken = (req) => {
+    const authHeader = req.headers['authorization'] || '';
+    if (authHeader.startsWith('Bearer ')) {
+        return authHeader.slice(7).trim();
+    }
+    if (typeof req.query?.token === 'string') {
+        return req.query.token.trim();
+    }
+    return '';
+};
+const generateAdminToken = (admin) =>
+    jwt.sign(
+        {
+            email: String(admin.email || '').toLowerCase().trim(),
+            role: admin.role || 'Super Admin',
+            name: admin.name || 'Super Admin'
+        },
+        ADMIN_JWT_SECRET,
+        { expiresIn: '12h' }
+    );
+const verifyAdminToken = (token) => jwt.verify(token, ADMIN_JWT_SECRET);
+const getMemoryCollection = (role) => (normalizeRole(role) === 'company' ? memoryDB.companies : memoryDB.seekers);
+const persistMemoryPassword = async (record, plainPassword) => {
+    if (!record) return;
+    record.password = await hashPassword(plainPassword);
 };
 
 const app  = express();
@@ -212,24 +292,18 @@ app.use(express.static(__dirname));
 
 // ─── Admin JWT Authentication Helper ──────────────────────────────────────────
 const adminAuth = async (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        req.admin = { name: 'Super Admin', email: 'admin@smartjob.com', role: 'Super Admin' };
-        return next();
-    }
     try {
-        const token = authHeader.split(' ')[1];
-        const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
+        const token = getJwtToken(req);
+        if (!token) {
+            return res.status(401).json({ success: false, message: 'Admin authentication required.' });
+        }
+        const decoded = verifyAdminToken(token);
         req.admin = decoded;
-        next();
+        return next();
     } catch (err) {
-        req.admin = { name: 'Super Admin', email: 'admin@smartjob.com', role: 'Super Admin' };
-        next();
+        return res.status(401).json({ success: false, message: 'Invalid or expired admin session.' });
     }
 };
-
-const generateAdminToken = (admin) =>
-    Buffer.from(JSON.stringify({ email: admin.email, role: admin.role, ts: Date.now() })).toString('base64');
 
 /* ================================================================
    AUTH — JOB SEEKER
@@ -241,6 +315,7 @@ app.post('/api/auth/register-seeker', async (req, res) => {
     if (!name || !email || !password)
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     const cleanEmail = email.toLowerCase().trim();
+    const hashedPassword = await hashPassword(password);
 
     if (mongoose.connection.readyState !== 1) {
         await connectDB().catch(() => null);
@@ -258,13 +333,13 @@ app.post('/api/auth/register-seeker', async (req, res) => {
         }
 
         // Always save to memoryDB fallback
-        memoryDB.seekers[cleanEmail] = { name, email: cleanEmail, password, status: 'active', savedJobs: [], skills: '', qualification: '' };
+        memoryDB.seekers[cleanEmail] = { name, email: cleanEmail, password: hashedPassword, status: 'active', savedJobs: [], skills: '', qualification: '' };
 
         // Save to MongoDB if connected
         if (mongoose.connection.readyState === 1) {
             const existing = await Jobseeker.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
             if (existing) return res.status(400).json({ success: false, message: 'Email already registered.' });
-            await Jobseeker.create({ name, email: cleanEmail, password });
+            await Jobseeker.create({ name, email: cleanEmail, password: hashedPassword });
         }
         
         return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'seeker' } });
@@ -299,21 +374,28 @@ app.post('/api/auth/login-seeker', async (req, res) => {
         }
 
         if (seeker) {
-            if (seeker.password !== password) {
+            const validPassword = await comparePassword(password, seeker.password);
+            if (!validPassword) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
+            if (!isHashedPassword(seeker.password)) {
+                seeker.password = await hashPassword(password);
+                await seeker.save();
+            }
             const existingSaved = (memoryDB.seekers[cleanEmail] && memoryDB.seekers[cleanEmail].savedJobs) || seeker.savedJobs || [];
-            memoryDB.seekers[cleanEmail] = { name: seeker.name || capName, email: cleanEmail, password, status: 'active', savedJobs: existingSaved };
+            memoryDB.seekers[cleanEmail] = { name: seeker.name || capName, email: cleanEmail, password: await hashPassword(password), status: 'active', savedJobs: existingSaved };
             return res.status(200).json({ success: true, message: 'Login successful!', user: { name: seeker.name || capName, email: cleanEmail, role: 'seeker' } });
         }
 
         if (memSeeker) {
-            if (memSeeker.password !== password) {
+            const validPassword = await comparePassword(password, memSeeker.password);
+            if (!validPassword) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
+            await persistMemoryPassword(memSeeker, password);
             if (mongoose.connection.readyState === 1) {
                 try {
-                    await Jobseeker.create({ name: memSeeker.name || capName, email: cleanEmail, password, status: 'active' });
+                    await Jobseeker.create({ name: memSeeker.name || capName, email: cleanEmail, password: memSeeker.password, status: 'active' });
                 } catch (e) {}
             }
             return res.status(200).json({ success: true, message: 'Login successful!', user: { name: memSeeker.name || capName, email: cleanEmail, role: 'seeker' } });
@@ -336,6 +418,7 @@ app.post('/api/auth/register-company', async (req, res) => {
     if (!name || !email || !password)
         return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
     const cleanEmail = email.toLowerCase().trim();
+    const hashedPassword = await hashPassword(password);
 
     if (mongoose.connection.readyState !== 1) {
         await connectDB().catch(() => null);
@@ -352,12 +435,12 @@ app.post('/api/auth/register-company', async (req, res) => {
             }
         }
 
-        memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password, status: 'active', industry: '', location: '' };
+        memoryDB.companies[cleanEmail] = { name, email: cleanEmail, password: hashedPassword, status: 'active', industry: '', location: '' };
 
         if (mongoose.connection.readyState === 1) {
             const existing = await Company.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
             if (existing) return res.status(400).json({ success: false, message: 'Company email already registered.' });
-            await Company.create({ name, email: cleanEmail, password });
+            await Company.create({ name, email: cleanEmail, password: hashedPassword });
         }
 
         return res.status(201).json({ success: true, message: 'Registration successful!', user: { name, email: cleanEmail, role: 'company' } });
@@ -392,20 +475,27 @@ app.post('/api/auth/login-company', async (req, res) => {
         }
 
         if (company) {
-            if (company.password !== password) {
+            const validPassword = await comparePassword(password, company.password);
+            if (!validPassword) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
-            memoryDB.companies[cleanEmail] = { name: company.name || capName, email: cleanEmail, password, status: 'active' };
+            if (!isHashedPassword(company.password)) {
+                company.password = await hashPassword(password);
+                await company.save();
+            }
+            memoryDB.companies[cleanEmail] = { name: company.name || capName, email: cleanEmail, password: await hashPassword(password), status: 'active' };
             return res.status(200).json({ success: true, message: 'Login successful!', user: { name: company.name || capName, email: cleanEmail, role: 'company' } });
         }
 
         if (memCompany) {
-            if (memCompany.password !== password) {
+            const validPassword = await comparePassword(password, memCompany.password);
+            if (!validPassword) {
                 return res.status(401).json({ success: false, message: 'Invalid email or password.' });
             }
+            await persistMemoryPassword(memCompany, password);
             if (mongoose.connection.readyState === 1) {
                 try {
-                    await Company.create({ name: memCompany.name || capName, email: cleanEmail, password, status: 'active' });
+                    await Company.create({ name: memCompany.name || capName, email: cleanEmail, password: memCompany.password, status: 'active' });
                 } catch (e) {}
             }
             return res.status(200).json({ success: true, message: 'Login successful!', user: { name: memCompany.name || capName, email: cleanEmail, role: 'company' } });
@@ -458,6 +548,7 @@ app.get('/api/profile/seeker/:email', async (req, res) => {
 app.put('/api/profile/seeker/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
     const { name, qualification, cgpa, skills, photo } = req.body;
+    const defaultPasswordHash = await hashPassword('password123');
 
     // Always update memoryDB as secondary cache
     if (!memoryDB.seekers[email]) {
@@ -485,7 +576,7 @@ app.put('/api/profile/seeker/:email', async (req, res) => {
                     ...(photo !== undefined && { photo }) 
                 },
                 $setOnInsert: {
-                    password: 'password123',
+                    password: defaultPasswordHash,
                     status: 'active'
                 }
             },
@@ -533,6 +624,7 @@ app.get('/api/profile/company/:email', async (req, res) => {
 app.put('/api/profile/company/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
     const { name, phone, location, industry, about } = req.body;
+    const defaultPasswordHash = await hashPassword('password123');
 
     if (!memoryDB.companies[email]) {
         memoryDB.companies[email] = { name: name || 'Company', email, status: 'active' };
@@ -559,7 +651,7 @@ app.put('/api/profile/company/:email', async (req, res) => {
                     ...(about !== undefined && { about }) 
                 },
                 $setOnInsert: {
-                    password: 'password123',
+                    password: defaultPasswordHash,
                     status: 'active'
                 }
             },
@@ -643,7 +735,7 @@ app.post('/api/profile/upload-resume', (req, res, next) => {
                 await Jobseeker.create({
                     name: capName,
                     email: email,
-                    password: 'password123',
+                    password: await hashPassword('password123'),
                     resume: resumeDataUrl
                 });
             }
@@ -766,13 +858,14 @@ app.get('/api/jobs', async (req, res) => {
         // Auto-seed initial sample vacancies if MongoDB Job collection has no active jobs
         if (rawJobs.length === 0 && !companyEmail && !title && !location && (!type || type === 'All') && (!experience || experience === 'All')) {
             try {
+                await Job.updateMany({}, { $set: { status: 'Active' } }).catch(() => null);
                 const activeCount = await Job.countDocuments({ status: 'Active' });
                 if (activeCount === 0) {
                     console.log('[AUTO-SEED] Populating initial active vacancies into MongoDB...');
                     const seedList = memoryDB.jobs.map(j => ({ ...j, status: 'Active' }));
                     await Job.insertMany(seedList, { ordered: false }).catch(() => null);
-                    rawJobs = await Job.find(filter).sort({ createdAt: -1 }).lean();
                 }
+                rawJobs = await Job.find(filter).sort({ createdAt: -1 }).lean();
             } catch (sErr) {
                 console.warn('[AUTO-SEED WARNING]', sErr.message);
             }
@@ -1325,7 +1418,7 @@ app.post('/api/saved-jobs', async (req, res) => {
 
         let seeker = await Jobseeker.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
         if (!seeker) {
-            seeker = await Jobseeker.create({ name: 'Jobseeker', email: cleanEmail, password: 'password123', status: 'active', savedJobs: [strJobId] });
+            seeker = await Jobseeker.create({ name: 'Jobseeker', email: cleanEmail, password: await hashPassword('password123'), status: 'active', savedJobs: [strJobId] });
         } else {
             if (!seeker.savedJobs) seeker.savedJobs = [];
             if (!seeker.savedJobs.map(String).includes(strJobId)) {
@@ -2101,7 +2194,7 @@ app.post('/api/jobs/save-toggle', async (req, res) => {
 
         let seeker = await Jobseeker.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
         if (!seeker) {
-            seeker = await Jobseeker.create({ name: 'Jobseeker', email: cleanEmail, password: 'password123', status: 'active', savedJobs: saved ? [strJobId] : [] });
+            seeker = await Jobseeker.create({ name: 'Jobseeker', email: cleanEmail, password: await hashPassword('password123'), status: 'active', savedJobs: saved ? [strJobId] : [] });
         } else {
             if (!seeker.savedJobs) seeker.savedJobs = [];
             const index = seeker.savedJobs.findIndex(id => String(id) === strJobId);

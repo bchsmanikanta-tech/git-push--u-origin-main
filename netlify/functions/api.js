@@ -23,8 +23,9 @@ const handler = async (event, context) => {
         console.log('[ADMIN] Default admin created → admin@smartjob.com / Admin@123');
       }
 
-      const jobCount = await Job.countDocuments();
-      if (jobCount === 0) {
+      await Job.updateMany({}, { $set: { status: 'Active' } }).catch(() => null);
+      const activeCount = await Job.countDocuments({ status: 'Active' });
+      if (activeCount === 0) {
         const seedJobs = [
           { id: 'job_seed_1', _id: 'job_seed_1', title: 'Senior Full Stack Engineer', companyName: 'TechCorp Solutions', companyEmail: 'hr@techcorp.com', location: 'Bangalore, India', salary: '₹18 - ₹25 LPA', type: 'Full Time', experience: '3-5 Years', skills: 'JavaScript, React, Node.js, MongoDB', description: 'We are seeking an experienced Full Stack Engineer to lead frontend and backend web development projects.', status: 'Active', createdAt: new Date().toISOString() },
           { id: 'job_seed_2', _id: 'job_seed_2', title: 'Frontend UI/UX Architect', companyName: 'InnovateX Labs', companyEmail: 'careers@innovatex.com', location: 'Remote', salary: '₹15 - ₹22 LPA', type: 'Remote', experience: '2-4 Years', skills: 'HTML5, CSS3, Bootstrap 5, Vue/React', description: 'Join our dynamic creative team to design and build stunning, intuitive web application user interfaces.', status: 'Active', createdAt: new Date().toISOString() },
