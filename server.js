@@ -763,19 +763,20 @@ app.get('/api/jobs', async (req, res) => {
 
         let rawJobs = await Job.find(filter).sort({ createdAt: -1 }).lean();
 
-        // Auto-seed initial sample vacancies if MongoDB Job collection is empty
+        // Auto-seed initial sample vacancies if MongoDB Job collection has no active jobs
         if (rawJobs.length === 0 && !companyEmail && !title && !location && (!type || type === 'All') && (!experience || experience === 'All')) {
             try {
-                const count = await Job.countDocuments();
-                if (count === 0) {
-                    console.log('[AUTO-SEED] Populating initial vacancies into MongoDB...');
-                    await Job.insertMany(memoryDB.jobs, { ordered: false }).catch(() => null);
+                const activeCount = await Job.countDocuments({ status: 'Active' });
+                if (activeCount === 0) {
+                    console.log('[AUTO-SEED] Populating initial active vacancies into MongoDB...');
+                    const seedList = memoryDB.jobs.map(j => ({ ...j, status: 'Active' }));
+                    await Job.insertMany(seedList, { ordered: false }).catch(() => null);
                     rawJobs = await Job.find(filter).sort({ createdAt: -1 }).lean();
                 }
             } catch (sErr) {
                 console.warn('[AUTO-SEED WARNING]', sErr.message);
             }
-            if (rawJobs.length === 0) {
+            if (!rawJobs || rawJobs.length === 0) {
                 rawJobs = memoryDB.jobs;
             }
         }
