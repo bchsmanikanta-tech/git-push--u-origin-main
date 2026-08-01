@@ -366,36 +366,66 @@ const LocalSavedJobs = {
     },
     get(email) {
         try {
-            const raw = SafeStorage.getItem(this.getKey(email));
-            const parsed = raw ? JSON.parse(raw) : [];
-            return Array.isArray(parsed) ? parsed.map(item => typeof item === 'object' ? String(item.id || item._id || '') : String(item)).filter(Boolean) : [];
+            const cleanEmail = (email || 'guest').toLowerCase().trim();
+            const raw = SafeStorage.getItem(this.getKey(cleanEmail));
+            let parsed = raw ? JSON.parse(raw) : [];
+            parsed = Array.isArray(parsed) ? parsed.map(item => typeof item === 'object' ? String(item.id || item._id || '') : String(item)).filter(Boolean) : [];
+            
+            // Auto-merge guest bookmarks so saved jobs created as guest are never lost after login
+            if (cleanEmail !== 'guest') {
+                try {
+                    const guestRaw = SafeStorage.getItem(this.getKey('guest'));
+                    const guestParsed = guestRaw ? JSON.parse(guestRaw) : [];
+                    const guestList = Array.isArray(guestParsed) ? guestParsed.map(item => typeof item === 'object' ? String(item.id || item._id || '') : String(item)).filter(Boolean) : [];
+                    if (guestList.length > 0) {
+                        const mergedSet = new Set([...parsed, ...guestList]);
+                        parsed = Array.from(mergedSet);
+                        this.saveAll(cleanEmail, parsed);
+                    }
+                } catch(e) {}
+            }
+            return parsed;
         } catch(e) {
             return [];
         }
     },
     saveAll(email, savedIds) {
         try {
+            const cleanEmail = (email || 'guest').toLowerCase().trim();
             const cleanList = Array.from(new Set((savedIds || []).map(item => {
                 if (!item) return '';
                 if (typeof item === 'object') return String(item.id || item._id || item);
                 return String(item);
             }).filter(Boolean)));
-            SafeStorage.setItem(this.getKey(email), JSON.stringify(cleanList));
+            SafeStorage.setItem(this.getKey(cleanEmail), JSON.stringify(cleanList));
         } catch(e) {}
     },
     add(email, jobId) {
-        const list = this.get(email);
+        const cleanEmail = (email || 'guest').toLowerCase().trim();
         const strId = String(jobId);
+        const list = this.get(cleanEmail);
         if (!list.includes(strId)) {
             list.push(strId);
-            this.saveAll(email, list);
+            this.saveAll(cleanEmail, list);
+        }
+        if (cleanEmail !== 'guest') {
+            const guestList = this.get('guest');
+            if (!guestList.includes(strId)) {
+                guestList.push(strId);
+                this.saveAll('guest', guestList);
+            }
         }
         return list;
     },
     remove(email, jobId) {
+        const cleanEmail = (email || 'guest').toLowerCase().trim();
         const strId = String(jobId);
-        const list = this.get(email).filter(id => String(id) !== strId);
-        this.saveAll(email, list);
+        const list = this.get(cleanEmail).filter(id => String(id) !== strId);
+        this.saveAll(cleanEmail, list);
+        if (cleanEmail !== 'guest') {
+            const guestList = this.get('guest').filter(id => String(id) !== strId);
+            this.saveAll('guest', guestList);
+        }
         return list;
     }
 };

@@ -493,7 +493,7 @@
                 let isSaved = savedIdsList.includes(String(jobId));
 
                 const saveBtnHtml = `
-                    <button id="save-job-btn" class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-primary'} py-3 px-4 shadow-sm fw-semibold ms-2">
+                    <button type="button" id="save-job-btn" class="btn ${isSaved ? 'btn-success text-white' : 'btn-outline-primary'} py-3 px-4 shadow-sm fw-semibold ms-2">
                         <i class="bi ${isSaved ? 'bi-check-circle-fill' : 'bi-bookmark-plus'} me-1.5"></i>
                         ${isSaved ? 'Saved' : 'Save Job'}
                     </button>
