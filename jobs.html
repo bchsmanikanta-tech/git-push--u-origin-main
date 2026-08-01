@@ -142,6 +142,15 @@
                     const activeUser = Session.getUser();
                     const activeEmail = (activeUser && activeUser.email) ? activeUser.email : 'guest';
 
+                    const extractJobIds = (list) => {
+                        if (!Array.isArray(list)) return [];
+                        return list.map(item => {
+                            if (!item) return '';
+                            if (typeof item === 'object') return String(item.id || item._id || '');
+                            return String(item);
+                        }).filter(Boolean);
+                    };
+
                     // Load profile to get savedJobs if user is logged in
                     if (activeUser && activeUser.email && !seekerProfile) {
                         try {
@@ -153,12 +162,13 @@
                             console.warn('[JOBS] Profile notice:', pErr.message);
                         }
                     }
+                    
+                    const localSavedList = LocalSavedJobs.get(activeEmail).map(String);
                     if (!seekerProfile) {
-                        seekerProfile = { savedJobs: LocalSavedJobs.get(activeEmail) };
+                        seekerProfile = { savedJobs: localSavedList };
                     } else {
-                        const localSaved = LocalSavedJobs.get(activeEmail);
-                        const merged = Array.from(new Set([...(seekerProfile.savedJobs || []).map(String), ...localSaved.map(String)])).filter(Boolean);
-                        seekerProfile.savedJobs = merged;
+                        const remoteSavedList = extractJobIds(seekerProfile.savedJobs);
+                        seekerProfile.savedJobs = Array.from(new Set([...remoteSavedList, ...localSavedList]));
                     }
 
                     // Prepare query payload
@@ -190,11 +200,7 @@
                         return;
                     }
 
-                    const savedIdsList = (seekerProfile.savedJobs || []).map(item => {
-                        if (!item) return '';
-                        if (typeof item === 'object') return String(item.id || item._id || '');
-                        return String(item);
-                    }).filter(Boolean);
+                    const savedIdsList = extractJobIds(seekerProfile.savedJobs);
 
                     jobs.forEach((job, index) => {
                         let iconClass = 'bi-laptop';
@@ -262,29 +268,32 @@
                             const jobId = String(btn.dataset.jobId);
 
                             if (!seekerProfile) seekerProfile = { savedJobs: [] };
-                            if (!seekerProfile.savedJobs) seekerProfile.savedJobs = [];
+                            seekerProfile.savedJobs = extractJobIds(seekerProfile.savedJobs);
 
-                            const currentSaved = (seekerProfile.savedJobs || []).map(String);
-                            const isSavedNow = currentSaved.includes(jobId);
+                            const currentLocal = LocalSavedJobs.get(userEmail).map(String);
+                            const currentSavedSet = new Set([...seekerProfile.savedJobs, ...currentLocal]);
+                            const isSavedNow = currentSavedSet.has(jobId);
 
                             try {
                                 if (isSavedNow) {
-                                    // Remove bookmark instantly in UI
-                                    seekerProfile.savedJobs = currentSaved.filter(id => String(id) !== jobId);
+                                    // Remove bookmark
+                                    seekerProfile.savedJobs = seekerProfile.savedJobs.filter(id => id !== jobId);
+                                    LocalSavedJobs.remove(userEmail, jobId);
+
                                     btn.className = 'btn btn-outline-primary bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
                                     btn.innerHTML = '<i class="bi bi-bookmark-plus me-1.5"></i> Save Job';
                                     showToast("Job removed from saved list!", "info");
 
-                                    // Sync with storage and API in background
                                     await API.savedJobs.remove(userEmail, jobId).catch(err => console.warn('SavedJobs remove notice:', err));
                                 } else {
-                                    // Add bookmark instantly in UI
+                                    // Add bookmark
                                     seekerProfile.savedJobs.push(jobId);
+                                    LocalSavedJobs.add(userEmail, jobId);
+
                                     btn.className = 'btn btn-success text-white bookmark-btn px-3 py-2.5 fw-semibold d-flex align-items-center justify-content-center';
                                     btn.innerHTML = '<i class="bi bi-check-circle-fill me-1.5"></i> Saved';
                                     showToast("Job bookmarked successfully!", "success");
 
-                                    // Sync with storage and API in background
                                     await API.savedJobs.add(userEmail, jobId).catch(err => console.warn('SavedJobs add notice:', err));
                                 }
                             } catch (bookmarkErr) {

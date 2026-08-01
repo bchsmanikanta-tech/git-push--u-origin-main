@@ -584,10 +584,13 @@
                         btn.addEventListener('click', async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            const jobId = btn.dataset.jobId;
+                            const jobId = String(btn.dataset.jobId);
+                            const card = document.getElementById(`saved-job-card-${jobId}`);
+                            if (card) card.remove();
+                            showToast("Bookmark removed!", "info");
                             try {
+                                LocalSavedJobs.remove(seekerEmail, jobId);
                                 await API.savedJobs.remove(seekerEmail, jobId);
-                                showToast("Bookmark removed!", "info");
                                 loadSavedJobs();
                             } catch (err) {
                                 console.error("Remove bookmark error:", err);
