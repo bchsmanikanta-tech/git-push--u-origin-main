@@ -12,6 +12,61 @@
   status = 200
 
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/jobs"
+  to = "/jobs.html"
+  status = 200
+
+[[redirects]]
+  from = "/job-details"
+  to = "/job-details.html"
+  status = 200
+
+[[redirects]]
+  from = "/jobseeker-dashboard"
+  to = "/jobseeker-dashboard.html"
+  status = 200
+
+[[redirects]]
+  from = "/company-dashboard"
+  to = "/company-dashboard.html"
+  status = 200
+
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+
+[[redirects]]
+  from = "/my-applications"
+  to = "/my-applications.html"
+  status = 200
+
+[[redirects]]
+  from = "/apply-jobs"
+  to = "/apply-jobs.html"
+  status = 200
+
+[[redirects]]
+  from = "/post-job"
+  to = "/post-job.html"
+  status = 200
+
+[[redirects]]
+  from = "/manage-jobs"
+  to = "/manage-jobs.html"
+  status = 200
+
+[[redirects]]
+  from = "/candidate-ranker"
+  to = "/candidate-ranker.html"
+  status = 200
+
+[[redirects]]
+  from = "/jobseeker-profile"
+  to = "/jobseeker-profile.html"
+  status = 200
+
+[[redirects]]
+  from = "/company-profile"
+  to = "/company-profile.html"
   status = 200
