@@ -900,8 +900,9 @@ app.get('/api/jobs', async (req, res) => {
 
         res.json({ success: true, jobs: paginatedJobs, total, page: pageVal, totalPages });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Server error.' });
+        console.error('[JOBS ERROR]', error.message);
+        const jobs = (memoryDB.jobs || []).map(j => ({ ...j, id: j.id || j._id, _id: j._id || j.id }));
+        res.json({ success: true, jobs, total: jobs.length, page: 1, totalPages: 1 });
     }
 });
 

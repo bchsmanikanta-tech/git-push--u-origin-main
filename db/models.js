@@ -28,7 +28,6 @@ const companySchema = new mongoose.Schema({
 
 // ─── Job ─────────────────────────────────────────────────────────────────────
 const jobSchema = new mongoose.Schema({
-    _id:         { type: String },
     id:          { type: String },
     title:       { type: String, required: true },
     companyEmail:{ type: String, required: true, lowercase: true },
@@ -46,7 +45,6 @@ const jobSchema = new mongoose.Schema({
 
 // ─── Application ─────────────────────────────────────────────────────────────
 const applicationSchema = new mongoose.Schema({
-    _id:          { type: String },
     id:           { type: String },
     jobId:        { type: String, required: true },
     jobTitle:     { type: String, required: true },
